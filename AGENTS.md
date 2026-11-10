@@ -9,6 +9,7 @@ Plan → wait for Dave's go → branch `feat/<slice>` → build → prove → PR
 Tell Dave **before** any change that needs a new EAS native build.
 
 ## Non-negotiables in this repo
+- **No AI attribution in git.** Never add `Co-Authored-By`, `Claude-Session`, "Generated with" or any other AI credit line to a commit message or PR description. Dave is the only author. The `.githooks/commit-msg` hook rejects them; after a fresh clone run `git config core.hooksPath .githooks`.
 - **Figma first.** No screen is built before its Figma frame exists.
 - **Tokens only** for colour, type, spacing (multiples of 4 or 8), radius, shadow. No raw values like `margin: 13`. CI lint fails on them.
 - **No money maths.** The server sends finished price strings. The app never computes a total or fee.
