@@ -41,4 +41,6 @@ README.md  LEARNING-LOG.md  .env.example  LICENSE (MIT)
 ```
 ADRs for mobile decisions go in `../matinee-server/docs/decisions/`.
 
+`src/tokens/tokens.ts` is generated from the Figma variables and is replaced whole whenever a variable changes there — never edit it by hand.
+
 Commands: _TBD at slice 0._ Do not invent script names.
