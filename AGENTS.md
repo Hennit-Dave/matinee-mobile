@@ -5,8 +5,19 @@ Expo React Native app for Matinee (cinema booking). Read by Codex, Antigravity a
 **The full rules live in the server repo:** `../matinee-server/AGENTS.md` (how to work) and `../matinee-server/docs/RULES.md` (every graded requirement). Read both before writing code. If that repo is not checked out next to this one, stop and ask Dave. Authority order: graduation brief PDF > RULES.md > AGENTS.md.
 
 ## Working loop
-Plan → wait for Dave's go → branch `feat/<slice>` → build → prove → PR with description and screenshots → **Dave merges**. Conventional Commits. Never merge, never force-push, never write or edit `LEARNING-LOG.md`.
+Plan → wait for Dave's go → branch `feat/<slice>` → build → prove → PR with description and screenshots → **Dave squash-merges**, then the agent confirms and deletes the branch (see "Merging and branch cleanup"). Conventional Commits. Never merge, never force-push, never write or edit `LEARNING-LOG.md`.
 Tell Dave **before** any change that needs a new EAS native build.
+
+## Merging and branch cleanup
+
+1. **Dave merges, and always with "Squash and merge".** Never a plain merge commit, never rebase-merge. The squash commit title is the PR title in Conventional Commits format.
+2. **The agent never merges** and never deletes a branch whose PR is still open.
+3. **When Dave says a PR is merged, confirm it before doing anything else:**
+   - `git fetch --prune origin`
+   - `gh pr view <number> --json state,mergeCommit` shows `MERGED` (if `gh` is unavailable, check that the PR's change is on `origin/main`).
+   - The new commit on `origin/main` has **one parent** and a title ending in `(#<number>)`: `git log -1 --format='%p | %s' origin/main`. Two parents, or a title starting "Merge pull request", means it was not squashed. Tell Dave; do not rewrite history to fix it.
+4. **Then clean up:** `git checkout main && git pull`, delete the local branch with `git branch -D <branch>` (capital D, because a squashed branch does not look merged to git), and delete the remote branch if GitHub has not already: `git push origin --delete <branch>`.
+5. **Report back in one line:** PR number, squash confirmed or not, branches deleted.
 
 ## Non-negotiables in this repo
 - **No AI attribution in git.** Never add `Co-Authored-By`, `Claude-Session`, "Generated with" or any other AI credit line to a commit message or PR description. Dave is the only author. The `.githooks/commit-msg` hook rejects them; after a fresh clone run `git config core.hooksPath .githooks`.
