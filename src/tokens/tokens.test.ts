@@ -5,9 +5,8 @@ import { semantic, type ThemeMode } from './tokens';
 type RGB = { r: number; g: number; b: number };
 
 function hexToRgb(hex: string): RGB {
-  const match = /^#([0-9a-f]{6})$/i.exec(hex);
-  if (!match) throw new Error(`Expected a 6-digit hex colour, got "${hex}"`);
-  const n = parseInt(match[1], 16);
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) throw new Error(`Expected a 6-digit hex colour, got "${hex}"`);
+  const n = parseInt(hex.slice(1), 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
