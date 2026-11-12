@@ -23,11 +23,37 @@ each native module to the slice that first needs it, so Expo Go covers slice 0.)
 
 ```
 npm install
-cp .env.example .env   # fill in EXPO_PUBLIC_API_URL, e.g. http://10.0.2.2:3000 for an Android emulator
-npm start               # opens Expo Go / the Metro bundler
+cp .env.example .env
+npm start
 ```
 
-`npm run typecheck`, `npm run lint` and `npm test` (unit tests only — see `.github/workflows/ci.yml`).
+Set `EXPO_PUBLIC_API_URL` in `.env` to point at your running `matinee-server`.
+How depends on the target:
+
+- **Android emulator (recommended):** forward the server port over adb, then
+  use `localhost`:
+  ```
+  adb reverse tcp:3000 tcp:3000
+  ```
+  `.env`: `EXPO_PUBLIC_API_URL=http://localhost:3000`. Re-run that `adb reverse`
+  after every emulator cold start — Expo restores the Metro port (8081) itself,
+  but not this one.
+- **Fallback:** `http://10.0.2.2:3000` (the emulator's host-loopback alias)
+  works on some machines without adb reverse, but not reliably on all.
+- **Physical device:** must be `https`. `src/api/config.ts` allows plain http
+  only to `localhost`, `127.0.0.1` and `10.0.2.2`, so a LAN IP such as
+  `http://192.168.x.x:3000` is rejected by design.
+
+The dev-only health screen at `/dev-health` confirms the app can reach the
+server (it calls `GET /health`). It is not in the tab bar; while Expo is
+running, open it with a deep link:
+```
+npx uri-scheme open "exp://<metro-host>:8081/--/dev-health" --android
+```
+Use the `exp://…` host Expo prints on start.
+
+`npm run typecheck`, `npm run lint` and `npm test` (unit tests only — see
+`.github/workflows/ci.yml`).
 
 ## Public environment variables
 
