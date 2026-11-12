@@ -46,6 +46,9 @@ export const primitives = {
   'fade/light': "rgba(246, 245, 242, 0)",
   'fade/dark': "rgba(14, 14, 15, 0)",
 
+  'glass/light': "rgba(255, 255, 255, 0.6)",
+  'glass/dark': "rgba(34, 34, 37, 0.7)",
+
   'space/0': 0,
   'space/1': 4,
   'space/2': 8,
@@ -118,6 +121,8 @@ export const primitives = {
   'type/caption/line-height': 16,
   'type/caption/weight': 500,
 
+  'blur/nav': 24,
+
   'elevation/1/y': 1,
   'elevation/1/blur': 3,
   'elevation/2/y': 4,
@@ -172,6 +177,7 @@ export const semantic = {
     'seat/sold': primitives['neutral/300'],
     'seat/sold-mark': primitives['neutral/500'],
     'seat/accessible': primitives['blue/700'],
+    'material/nav': primitives['glass/light'],
     'qr/background': primitives['neutral/0'],
     'qr/foreground': primitives['neutral/1000'],
     'skeleton/base': primitives['neutral/200'],
@@ -213,6 +219,7 @@ export const semantic = {
     'seat/sold': primitives['neutral/800'],
     'seat/sold-mark': primitives['neutral/600'],
     'seat/accessible': primitives['blue/300'],
+    'material/nav': primitives['glass/dark'],
     'qr/background': primitives['neutral/0'],
     'qr/foreground': primitives['neutral/1000'],
     'skeleton/base': primitives['neutral/900'],

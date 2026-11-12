@@ -1,6 +1,6 @@
 # Matinee components: Figma to code handoff
 
-Source of truth: the Figma file "Matinee" (fileKey `76VKO0l9gGt5YMNYtH8yvM`), page **Components** for the masters and page **Gallery** for every variant in Dark and Light. Tokens: `src/tokens/tokens.ts` (150 variables, checksum 31080949).
+Source of truth: the Figma file "Matinee" (fileKey `76VKO0l9gGt5YMNYtH8yvM`), page **Components** for the masters and page **Gallery** for every variant in Dark and Light. Tokens: `src/tokens/tokens.ts` (154 variables, checksum 2974593486).
 
 ## How to read this
 
@@ -272,11 +272,32 @@ Rules that apply to every component:
 ## 7. Navigation and sheets
 
 ### NavBar
-- **Figma:** `NavBar` (`37:812`). **Code:** `NavBar`.
-- **Props:** `active: 'home' | 'tickets' | 'account'`, `onNavigate(route)`.
-- **Tokens:** floating pill, `surface/overlay`, `border/default`, `radius/full`, `elevation/3` (`shadow/3`), height `size/nav-height` (56) plus its own padding. Active item: `primary/default` pill with `text/on-primary` icon and label. Inactive: `text/secondary`. Icons `size/icon-lg`, labels `type/caption`.
-- **Rules:** three items only (Home, Tickets, Account). Each item is at least 48 wide and tall. The active item is a filled pill with a label, so it doesn't rely on colour.
-- Safe-area bottom inset applies.
+- **Figma:** `NavBar` (`37:812`), 3 active states × 2 materials. **Code:** `NavBar`.
+- **Props:**
+
+| Figma | Code prop | Values |
+|---|---|---|
+| Active | `active` | `home`, `tickets`, `account` |
+| Material | `reduceTransparency` | `false` = Glass (default), `true` = Solid fallback |
+| | `onNavigate(route)` | handler |
+
+- **Glass (default):** a frosted floating pill. Two layers:
+  - Background blur of `primitives['blur/nav']` (24).
+  - Tint fill `semantic[mode]['material/nav']` over the blur. This is `glass/light` (`#FFFFFF` at 60%) in light and `glass/dark` (`#222225` at 70%) in dark.
+  - Plus `border/default` hairline (`border-width/default`) and `elevation/3` (`shadow/3`), unchanged.
+- **Solid (reduce-transparency fallback):** `surface/overlay` fill, no blur, same border and elevation. Use it when the OS reduce-transparency setting is on, when backdrop blur isn't available, or when blur can't be done smoothly on the device.
+- **Shared:** shape `radius/full`, height `size/nav-height` (56) plus its own padding, icons `size/icon-lg`, labels `type/caption`. Inactive icons and labels use `text/primary` (in both materials), so the tint can stay clear. The active item is a **filled pill**: `primary/default` fill with `text/on-primary` icon and label, so it doesn't depend on what is behind the bar and doesn't rely on colour.
+- **Contrast, checked:**
+  - The tint is as clear as it can be while legibility holds over any background.
+  - The worst case for the inactive labels is dark under the light tint and white under the dark tint.
+  - With `text/primary` labels, the contrast is **6.52:1** in light over pure black (60% tint) and **5.39:1** in dark over pure white (70% tint). Both clear 4.5:1.
+  - With `text/secondary` labels the same tint would fail (2.36:1 in light and 2.46:1 in dark at these opacities), so the label colour and the tint opacity go together. The older 90% tint with `text/secondary` labels passed (5.36:1 and 4.89:1) but looked heavy.
+  - The minimum tint with `text/primary` is about 50% in light and 65% in dark. If you lower the opacity, re-run the numbers first.
+- **Rules:** three items only (Home, Tickets, Account). Each item is at least 48 wide and tall. **Hidden during Seat selection and Checkout**, which have their own footer. Safe-area bottom inset applies.
+- **Code notes (to confirm when built):**
+  - Backdrop blur would come from `expo-blur`. Its blur strength is not the same unit as the 24 in Figma, so tune it by eye against the Gallery frames.
+  - On Android, backdrop blur is the less certain platform. As far as I know there is no system-wide "reduce transparency" flag on Android (the React Native `AccessibilityInfo.isReduceTransparencyEnabled` is iOS only). Fall back to Solid when blur isn't available.
+  - Adding `expo-blur` may need a new EAS native build. Tell Dave before that change (AGENTS.md).
 
 ### BottomSheet
 - **Figma:** `BottomSheet` (`19:13`) with a content slot. **Code:** `BottomSheet`.
