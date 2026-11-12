@@ -43,6 +43,9 @@ export const primitives = {
   'black/16': "rgba(0, 0, 0, 0.16)",
   'black/60': "rgba(0, 0, 0, 0.6)",
 
+  'fade/light': "rgba(246, 245, 242, 0)",
+  'fade/dark': "rgba(14, 14, 15, 0)",
+
   'space/0': 0,
   'space/1': 4,
   'space/2': 8,
@@ -78,6 +81,10 @@ export const primitives = {
   'border-width/default': 1,
   'border-width/strong': 2,
 
+  'type/numeral/family': "Newsreader",
+  'type/numeral/size': 64,
+  'type/numeral/line-height': 72,
+  'type/numeral/weight': 400,
   'type/display/family': "Newsreader",
   'type/display/size': 32,
   'type/display/line-height': 40,
@@ -137,6 +144,8 @@ export const semantic = {
     'surface/raised': primitives['neutral/0'],
     'surface/overlay': primitives['neutral/0'],
     'surface/scrim': primitives['black/60'],
+    'surface/default-clear': primitives['fade/light'],
+    'surface/scrim-clear': primitives['black/0'],
     'border/default': primitives['neutral/200'],
     'border/strong': primitives['neutral/500'],
     'text/primary': primitives['neutral/950'],
@@ -163,6 +172,8 @@ export const semantic = {
     'seat/sold': primitives['neutral/300'],
     'seat/sold-mark': primitives['neutral/500'],
     'seat/accessible': primitives['blue/700'],
+    'qr/background': primitives['neutral/0'],
+    'qr/foreground': primitives['neutral/1000'],
     'skeleton/base': primitives['neutral/200'],
     'skeleton/highlight': primitives['neutral/50'],
     'shadow/1': primitives['black/8'],
@@ -174,6 +185,8 @@ export const semantic = {
     'surface/raised': primitives['neutral/900'],
     'surface/overlay': primitives['neutral/850'],
     'surface/scrim': primitives['black/60'],
+    'surface/default-clear': primitives['fade/dark'],
+    'surface/scrim-clear': primitives['black/0'],
     'border/default': primitives['neutral/800'],
     'border/strong': primitives['neutral/600'],
     'text/primary': primitives['neutral/50'],
@@ -200,6 +213,8 @@ export const semantic = {
     'seat/sold': primitives['neutral/800'],
     'seat/sold-mark': primitives['neutral/600'],
     'seat/accessible': primitives['blue/300'],
+    'qr/background': primitives['neutral/0'],
+    'qr/foreground': primitives['neutral/1000'],
     'skeleton/base': primitives['neutral/900'],
     'skeleton/highlight': primitives['neutral/850'],
     'shadow/1': primitives['black/0'],
@@ -216,6 +231,12 @@ export type SemanticToken = keyof typeof semantic.light;
  * family and weight held in the matching type/<step>/family and /weight primitives.
  */
 export const textStyles = {
+  'type/numeral': {
+    fontFamily: 'Newsreader_400Regular',
+    fontSize: primitives['type/numeral/size'],
+    lineHeight: primitives['type/numeral/line-height'],
+    fontWeight: primitives['type/numeral/weight'],
+  },
   'type/display': {
     fontFamily: 'Newsreader_400Regular',
     fontSize: primitives['type/display/size'],
