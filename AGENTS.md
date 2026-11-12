@@ -25,11 +25,11 @@ Tell Dave **before** any change that needs a new EAS native build.
 - **Tokens only** for colour, type, spacing (multiples of 4 or 8), radius, shadow. No raw values like `margin: 13`. CI lint fails on them.
 - **No money maths.** The server sends finished price strings. The app never computes a total or fee.
 - **Never call TMDB.** The app only calls the Matinee server.
-- **No secrets.** Every `EXPO_PUBLIC_*` variable is public; list each in the README with why it is safe. Auth tokens go in `expo-secure-store`, never AsyncStorage.
+- **No secrets.** Every `EXPO_PUBLIC_*` variable is public; list each in the README with why it is safe. Auth tokens go in `expo-secure-store`, never AsyncStorage. Never create, overwrite, modify, or delete `.env` — it holds real values and regenerating it cannot recover them. If a local smoke test needs throwaway env values, write them to `.env.test.local` (git-ignored) and load that file explicitly — never write to `.env` or point a test at it.
 - **Never trust the app.** It displays what the server allows; no check that matters lives here.
 - **API types mirror the server contract.** A contract change lands in a `matinee-server` PR first; link it from the mobile PR.
 - Components live in the in-app library, are documented in `docs/COMPONENTS.md`, and appear in the hidden component gallery in every state.
-- Accessibility: contrast ≥ 4.5:1, labels on every button and image, text scales with system font size, touch targets ≥ 44×44.
+- Accessibility: contrast ≥ 4.5:1, labels on every button and image, text scales with system font size, touch targets ≥ 48×48.
 - Skeletons not spinners; designed empty, error and dark-mode states; Reanimated for transitions, seat selection, confirmation; haptics on seat select and payment confirm.
 - TMDB attribution on the About screen (RULES.md D1.1).
 
