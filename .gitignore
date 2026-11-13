@@ -8,6 +8,7 @@ node_modules/
 dist/
 build/
 .expo/
+expo-env.d.ts
 *.apk
 *.aab
 

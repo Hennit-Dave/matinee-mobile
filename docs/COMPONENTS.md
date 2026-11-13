@@ -11,7 +11,7 @@ Source of truth: the Figma file "Matinee" (fileKey `76VKO0l9gGt5YMNYtH8yvM`), pa
   - Everything else: `primitives['space/4']`, `primitives['radius/md']`, `primitives['size/touch-min']`, `primitives['border-width/default']`.
   - Type: `textStyles['type/body']`.
   - Elevation: `elevation[mode]['elevation/1']`.
-- **Never** write a raw value. The CI lint rejects it.
+- **Never** write a raw value. Tokens-only is enforced by code review and convention (no custom ESLint token rule is configured yet).
 - Pressed, Focused and Loading are runtime states, not props. Disabled and Loading are props because the caller decides them.
 - Theme is switched by mode (`light` / `dark`). No component reads a mode name directly.
 
