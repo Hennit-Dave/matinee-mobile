@@ -2,7 +2,7 @@ import { type Href, useRouter } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNowPlayingMovies } from '../../api/useMovies';
-import { Button, EmptyState, Icon, MovieCard, Skeleton, Text } from '../../components';
+import { Button, EmptyState, Icon, MovieCard, Skeleton, Text, useNavBarClearance } from '../../components';
 import { useTheme } from '../../theme';
 import { primitives } from '../../tokens/tokens';
 
@@ -11,6 +11,8 @@ const SKELETON_ITEMS = [0, 1, 2, 3, 4, 5];
 export default function Home() {
   const router = useRouter();
   const { colors } = useTheme();
+  // The list runs behind the floating NavBar; this keeps its last row (and the static states) clear of it.
+  const navClearance = useNavBarClearance();
   const { status, movies, error, isFetching, refetch } = useNowPlayingMovies(1);
 
   return (
@@ -44,7 +46,7 @@ export default function Home() {
       </View>
 
       {status === 'loading' ? (
-        <View style={styles.skeletonGrid}>
+        <View style={[styles.skeletonGrid, { paddingBottom: navClearance }]}>
           {SKELETON_ITEMS.map((item) => (
             <View key={item} style={styles.skeletonCard}>
               <Skeleton shape="poster" />
@@ -55,33 +57,39 @@ export default function Home() {
       ) : null}
 
       {status === 'server_overloaded' ? (
-        <EmptyState
-          icon="error"
-          headline="Server overloaded"
-          body="Movie data is temporarily unavailable. Please try again in a moment."
-          actionLabel={isFetching ? 'Retrying…' : 'Try again'}
-          onAction={refetch}
-        />
+        <View style={{ flex: 1, paddingBottom: navClearance }}>
+          <EmptyState
+            icon="error"
+            headline="Server overloaded"
+            body="Movie data is temporarily unavailable. Please try again in a moment."
+            actionLabel={isFetching ? 'Retrying…' : 'Try again'}
+            onAction={refetch}
+          />
+        </View>
       ) : null}
 
       {status === 'error' ? (
-        <EmptyState
-          icon="error"
-          headline="Couldn’t load movies"
-          body={error?.message ?? 'Check your connection and try again.'}
-          actionLabel={isFetching ? 'Retrying…' : 'Try again'}
-          onAction={refetch}
-        />
+        <View style={{ flex: 1, paddingBottom: navClearance }}>
+          <EmptyState
+            icon="error"
+            headline="Couldn’t load movies"
+            body={error?.message ?? 'Check your connection and try again.'}
+            actionLabel={isFetching ? 'Retrying…' : 'Try again'}
+            onAction={refetch}
+          />
+        </View>
       ) : null}
 
       {status === 'empty' ? (
-        <EmptyState
-          icon="info"
-          headline="No movies showing"
-          body="There are no now-playing films to show right now."
-          actionLabel="Refresh"
-          onAction={refetch}
-        />
+        <View style={{ flex: 1, paddingBottom: navClearance }}>
+          <EmptyState
+            icon="info"
+            headline="No movies showing"
+            body="There are no now-playing films to show right now."
+            actionLabel="Refresh"
+            onAction={refetch}
+          />
+        </View>
       ) : null}
 
       {status === 'ready' || status === 'offline_saved_data' ? (
@@ -90,7 +98,7 @@ export default function Home() {
           keyExtractor={(item) => String(item.id)}
           numColumns={2}
           columnWrapperStyle={styles.gridRow}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: navClearance }]}
           ListHeaderComponent={
             status === 'offline_saved_data' ? (
               <View
@@ -161,7 +169,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: primitives['space/6'],
     paddingTop: primitives['space/4'],
-    paddingBottom: primitives['space/8'],
     gap: primitives['space/4'],
   },
   gridRow: {
