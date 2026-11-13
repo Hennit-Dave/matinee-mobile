@@ -105,7 +105,7 @@ export function Input({
             accessibilityRole="button"
             accessibilityLabel="Clear search"
             onPress={onClear}
-            hitSlop={primitives['space/2']}
+            hitSlop={primitives['space/3']}
             style={styles.clearButton}
           >
             <Icon name="close" size="md" color="text/secondary" />

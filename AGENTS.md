@@ -20,6 +20,7 @@ Tell Dave **before** any change that needs a new EAS native build.
 5. **Report back in one line:** PR number, squash confirmed or not, branches deleted.
 
 ## Non-negotiables in this repo
+- **Git housekeeping is the agent's job; Dave only squash-merges.** Dave's single manual git action is the squash-merge on GitHub. Agents handle everything else: creating feature branches, deleting merged branches after a squash-merge, resolving leftover stashes, and clearing recurring tooling noise (e.g. expo-env.d.ts / .gitignore churn). Agents never merge PRs or force-push. When cleanup needs code changes, open a small PR for Dave to squash-merge.
 - **No AI attribution in git.** Never add `Co-Authored-By`, `Claude-Session`, "Generated with" or any other AI credit line to a commit message or PR description. Dave is the only author. The `.githooks/commit-msg` hook rejects them; after a fresh clone run `git config core.hooksPath .githooks`.
 - **Figma first.** No screen is built before its Figma frame exists.
 - **Tokens only** for colour, type, spacing (multiples of 4 or 8), radius, shadow. No raw values like `margin: 13`. CI lint fails on them.
