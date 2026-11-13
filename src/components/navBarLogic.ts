@@ -46,8 +46,7 @@ export const ANDROID_MIN_BLUR_SDK = 31;
 /**
  * Switch for Android glass. ON: real Android blur, with the NavBar drawn beside a BlurTargetView (see
  * `src/app/(tabs)/_layout.tsx`). Dave verified it smooth on a real Android 16 (API 36) phone; the
- * recordings are in `docs/evidence/glass-navbar/` (`android-glass-scroll.mp4`, with `android-solid-scroll.mp4`
- * for comparison). An earlier measurement on an API 37 emulator showed glass markedly worse than solid
+ * glass and Solid scroll recordings are attached to PR #16 (see `docs/evidence/glass-navbar/README.md`). An earlier measurement on an API 37 emulator showed glass markedly worse than solid
  * (about 92% janky frames in two of three warm runs, against about 69%), but that emulator was already
  * janky with Solid and is not representative of real hardware, so the result did not carry over.
  * Set this to false to draw the solid material on Android everywhere without touching anything else.

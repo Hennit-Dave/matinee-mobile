@@ -30,8 +30,8 @@
 
 ## Android: real glass is ON
 - `ANDROID_GLASS_ENABLED = true` in `navBarLogic.ts`. **Dave verified it smooth on a real Android 16 (API 36)
-  phone.** The recordings are `docs/evidence/glass-navbar/android-glass-scroll.mp4` and, for comparison,
-  `android-solid-scroll.mp4`. The constant stays as a one-line switch: `false` draws Solid on Android
+  phone.** The glass and Solid scroll recordings are attached to PR #16 (kept out of the
+  repo on purpose; see `docs/evidence/glass-navbar/README.md`). The constant stays as a one-line switch: `false` draws Solid on Android
   everywhere.
 - **Why this changed.** This PR first shipped Android Solid, because on the API 37 emulator glass made Home's
   list measurably worse (about 92% janky frames and 167 to 200 missed vsyncs in two of three warm runs, against

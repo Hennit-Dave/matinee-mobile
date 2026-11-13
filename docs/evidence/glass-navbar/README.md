@@ -8,19 +8,22 @@
 | `android-solid-tickets-active-light.png` | Tapping Tickets switches screens and moves the filled pill. |
 | `android-solid-home-dark-text-1.5x.png` | Dark mode (designed Solid, light active pill) at 1.5× system text: labels stay readable and the pill grows upward by about 10 px. |
 | `android-glass-experiment-crop.png` | **Android emulator: real blur.** The poster edges and checkerboard under the bar are smoothly diffused. |
-| `android-solid-scroll.mp4` | **Real Android phone: the Solid bar** (12.0 s). Home scrolling over real movie posters. |
-| `android-glass-scroll.mp4` | **Real Android phone: the glass bar** (41.4 s). Home scrolling with the posters blurred behind the bar, switching to Account and back, and opening Search. This is the recording behind turning Android glass on. |
 
-## Real-phone recordings
+## Real-phone recordings (attached to PR #16, not in the repo)
 
-Dave recorded both clips on a real Android 16 (API 36) phone (720 by 1600 screen) and judged the glass
-bar smooth. The movies are real titles with real posters, not the stub used for the emulator screenshots below. They are the evidence for
-`ANDROID_GLASS_ENABLED = true`.
+Two screen recordings from a real Android 16 (API 36) phone (720 by 1600 screen) are **attached to PR #16 as a
+comment**, not stored here, so that video does not sit in the repository's history:
 
-Both were **trimmed at the end and nothing else was changed** (no re-encode; same video and audio streams). The
-originals finish by pulling down Android's Quick Settings panel to stop the recording, and that panel shows the
-phone's Wi-Fi network name, which should not go in a public repo. The last 2.8 s of the Solid clip (14.8 s to 12.0 s)
-and 1.9 s of the glass clip (43.3 s to 41.4 s) were cut, ending on the app. The audio tracks are digital
+- **Solid bar** (12.0 s): Home scrolling over real movie posters.
+- **Glass bar** (41.4 s): Home scrolling with the posters blurred behind the bar, switching to Account and back,
+  and opening Search. Dave judged it smooth, which is the evidence for `ANDROID_GLASS_ENABLED = true`.
+
+The movies are real titles with real posters, not the stub used for the emulator screenshots below.
+
+Both clips were **trimmed at the end and nothing else was changed** (no re-encode; same video and audio streams).
+The originals finish by pulling down Android's Quick Settings panel to stop the recording, and that panel shows
+the phone's Wi-Fi network name, which should not go in a public repo. The last 2.8 s of the Solid clip (14.8 s to
+12.0 s) and 1.9 s of the glass clip (43.3 s to 41.4 s) were cut, ending on the app. The audio tracks are digital
 silence. The untrimmed originals stay with Dave.
 
 ## Emulator screenshots
