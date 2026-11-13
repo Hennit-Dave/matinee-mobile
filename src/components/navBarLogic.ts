@@ -44,14 +44,15 @@ export type NavMaterial = 'glass' | 'solid';
 export const ANDROID_MIN_BLUR_SDK = 31;
 
 /**
- * Switch for Android glass. OFF: real Android blur works (the NavBar sits beside a BlurTargetView) but
- * it measurably slowed Home's scrolling on the only device it could be tried on (an emulator, so not
- * representative hardware): about 92% janky frames and 167-200 missed vsyncs in two of three warm runs,
- * against about 69% and at most 22 for the solid bar. Solid is a designed state, so Android ships solid.
- * Flip this to true to try glass on a real phone; nothing else needs to change. Numbers and method are
- * in the handoff note.
+ * Switch for Android glass. ON: real Android blur, with the NavBar drawn beside a BlurTargetView (see
+ * `src/app/(tabs)/_layout.tsx`). Dave verified it smooth on a real Android 16 (API 36) phone; the
+ * recordings are in `docs/evidence/glass-navbar/` (`android-glass-scroll.mp4`, with `android-solid-scroll.mp4`
+ * for comparison). An earlier measurement on an API 37 emulator showed glass markedly worse than solid
+ * (about 92% janky frames in two of three warm runs, against about 69%), but that emulator was already
+ * janky with Solid and is not representative of real hardware, so the result did not carry over.
+ * Set this to false to draw the solid material on Android everywhere without touching anything else.
  */
-export const ANDROID_GLASS_ENABLED = false;
+export const ANDROID_GLASS_ENABLED = true;
 
 export interface NavMaterialInput {
   /** iOS "Reduce Transparency". Android has no such system setting, so this is always false there. */

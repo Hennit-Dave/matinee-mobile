@@ -63,12 +63,13 @@ test('with Android glass switched off, Android is always solid, whatever the dev
   assert.equal(resolveNavMaterial({ ...android, osVersion: 36, hasBlurTarget: true }), 'solid');
 });
 
-test('the app ships with Android glass off (measured slower on the emulator; see navBarLogic)', () => {
-  assert.equal(ANDROID_GLASS_ENABLED, false);
-  assert.equal(
-    resolveNavMaterial({ reduceTransparency: false, os: 'android', osVersion: 36, hasBlurTarget: true }),
-    'solid',
-  );
+test('the app ships with Android glass on (verified smooth on a real Android 16 phone)', () => {
+  assert.equal(ANDROID_GLASS_ENABLED, true);
+  const android = { reduceTransparency: false, os: 'android', hasBlurTarget: true };
+  assert.equal(resolveNavMaterial({ ...android, osVersion: 36 }), 'glass');
+  // Still solid where blur cannot be drawn: below API 31, or with nothing for the blur to read from.
+  assert.equal(resolveNavMaterial({ ...android, osVersion: ANDROID_MIN_BLUR_SDK - 1 }), 'solid');
+  assert.equal(resolveNavMaterial({ ...android, osVersion: 36, hasBlurTarget: false }), 'solid');
 });
 
 test('iOS is unaffected by the Android switch', () => {
