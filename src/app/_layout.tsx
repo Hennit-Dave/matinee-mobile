@@ -32,6 +32,7 @@ function RootContent() {
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors['surface/default'] } }}>
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="search" />
       {/* Development-only check screen: not reachable from the tab bar. */}
       <Stack.Screen name="dev-health" />
     </Stack>
