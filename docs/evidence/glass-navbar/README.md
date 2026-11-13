@@ -4,17 +4,37 @@
 |---|---|
 | `before-android-placeholder-tabbar.png` | `main` before this slice: Expo Router's default tab bar with broken box icons, flat, no active-item treatment. The baseline commit. |
 | `ios-glass-home-light.png` | **iOS simulator (iPhone 17, Expo Go): real glass.** The poster gradients behind the bar are frosted under the `material/nav` tint; Home is the filled pill. |
-| `android-solid-home-light-list-end.png` | **Android emulator: the shipping Solid material.** Home scrolled to the end: the last row (title and year) clears the pill. |
+| `android-solid-home-light-list-end.png` | **Android emulator: the Solid material** (now the fallback state on Android).  Home scrolled to the end: the last row (title and year) clears the pill. |
 | `android-solid-tickets-active-light.png` | Tapping Tickets switches screens and moves the filled pill. |
 | `android-solid-home-dark-text-1.5x.png` | Dark mode (designed Solid, light active pill) at 1.5× system text: labels stay readable and the pill grows upward by about 10 px. |
-| `android-glass-experiment-crop.png` | **Android real blur, switched off in the app.** The poster edges and checkerboard under the bar are smoothly diffused. This is what turning `ANDROID_GLASS_ENABLED` on draws. |
+| `android-glass-experiment-crop.png` | **Android emulator: real blur.** The poster edges and checkerboard under the bar are smoothly diffused. |
+| `android-solid-scroll.mp4` | **Real Android phone: the Solid bar** (12.0 s). Home scrolling over real movie posters. |
+| `android-glass-scroll.mp4` | **Real Android phone: the glass bar** (41.4 s). Home scrolling with the posters blurred behind the bar, switching to Account and back, and opening Search. This is the recording behind turning Android glass on. |
 
-The movie data in these screenshots is a throwaway stub (24 fictional movies with generated gradient
+## Real-phone recordings
+
+Dave recorded both clips on a real Android 16 (API 36) phone (720 by 1600 screen) and judged the glass
+bar smooth. The movies are real titles with real posters, not the stub used for the emulator screenshots below. They are the evidence for
+`ANDROID_GLASS_ENABLED = true`.
+
+Both were **trimmed at the end and nothing else was changed** (no re-encode; same video and audio streams). The
+originals finish by pulling down Android's Quick Settings panel to stop the recording, and that panel shows the
+phone's Wi-Fi network name, which should not go in a public repo. The last 2.8 s of the Solid clip (14.8 s to 12.0 s)
+and 1.9 s of the glass clip (43.3 s to 41.4 s) were cut, ending on the app. The audio tracks are digital
+silence. The untrimmed originals stay with Dave.
+
+## Emulator screenshots
+
+The movie data in the emulator screenshots is a throwaway stub (24 fictional movies with generated gradient
 posters), not the real server and not TMDB. Android was reached with `adb reverse`; the emulator's own
 `10.0.2.2` route did not carry the app's sockets on this API 37 image. No `.env` was read or written
 (`EXPO_PUBLIC_API_URL` was overridden inline).
 
-## Why Android ships Solid: scroll measurements
+## Earlier emulator scroll measurements (history; not representative of real hardware)
+
+These made this PR first ship Android Solid. A real phone then showed glass smooth (above), so they are kept
+only to show what was measured and why it did not carry over.
+
 
 Home scrolled up and down 10 times each (`scroll_run.sh`, via `adb input swipe`), frame stats from
 `dumpsys gfxinfo host.exp.exponent` reset before each run. Pixel_10a emulator (API 37, software-ish GPU),
@@ -36,10 +56,9 @@ Reading it honestly:
 - Glass is **worse in two of three runs** (fewer frames delivered, 167 to 200 missed vsyncs against at
   most 22) and about equal in one. The run-to-run spread is large, which is why there are three.
 - Two earlier, un-warmed runs agreed in direction: Solid 69% and 68%, Glass 94% and 78%.
-- This is a guardrail decision (fall back to Solid on Android if glass makes Home's list janky), not a
-  proof that glass is slow on hardware. **It has not been tried on a real Android phone.** Flip
-  `ANDROID_GLASS_ENABLED` to `true` in `src/components/navBarLogic.ts` and run Expo Go on a phone to judge
-  it; nothing else needs to change.
+- At the time this was a guardrail decision (fall back to Solid on Android if glass makes Home's list janky).
+  It was then checked on a real phone, where glass was smooth, so Android glass is on. The gap on the emulator
+  was a property of that emulator's rendering, not of the blur on devices.
 
 ## What the first attempt taught (kept so nobody repeats it)
 

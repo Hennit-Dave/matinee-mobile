@@ -25,27 +25,29 @@
 ## Reduce Transparency
 - iOS: `useReduceTransparency()` reads `AccessibilityInfo.isReduceTransparencyEnabled` and listens for
   `reduceTransparencyChanged`, so toggling the setting switches the bar to Solid live.
-- Android has no such system flag, so it is never "on" there. Android falls back to Solid on its own terms:
-  glass is off (below), and would also be Solid under API 31 or without a blur target.
+- Android has no such system flag, so it is never "on" there. Android falls back to Solid only where blur
+  cannot be drawn: under API 31, or without a blur target.
 
-## Android: Solid ships, real blur is built but switched off
-- Real Android blur **works** (`android-glass-experiment-crop.png`) but is switched off by
-  `ANDROID_GLASS_ENABLED = false` in `navBarLogic.ts`. Dave's guardrail was to fall back to Solid if glass made
-  Home's list janky. On the emulator (the only Android device available) it did: in two of three warm runs
-  about 92% janky frames and 167 to 200 missed vsyncs, against about 69% and at most 22 for Solid. Full table and
-  method: `docs/evidence/glass-navbar/README.md`.
-- **Caveat:** the emulator is already janky with Solid and is not representative hardware. Glass has **not**
-  been tried on a real phone. To try it: set the constant to `true`, run Expo Go on a phone, scroll Home.
+## Android: real glass is ON
+- `ANDROID_GLASS_ENABLED = true` in `navBarLogic.ts`. **Dave verified it smooth on a real Android 16 (API 36)
+  phone.** The recordings are `docs/evidence/glass-navbar/android-glass-scroll.mp4` and, for comparison,
+  `android-solid-scroll.mp4`. The constant stays as a one-line switch: `false` draws Solid on Android
+  everywhere.
+- **Why this changed.** This PR first shipped Android Solid, because on the API 37 emulator glass made Home's
+  list measurably worse (about 92% janky frames and 167 to 200 missed vsyncs in two of three warm runs, against
+  about 69% and at most 22 for Solid). The emulator was already janky with Solid and is not representative
+  hardware, and the real-phone check overturned the result. The emulator numbers are kept in the evidence README
+  as history, not as a finding about devices.
 - **Why the NavBar is beside the navigator, not its `tabBar`:** the first attempt (NavBar as `tabBar`, target
   around the navigator) put the `BlurView` inside the view it blurs. That recurses in `libhwui` until the render
   thread's stack overflows: a native crash. Expo Router cannot wrap only the screens, so the default bar is off
   and the NavBar is drawn as a sibling of the `BlurTargetView`. Details in the evidence README.
-- With the switch off, the screens are only wrapped in the native blur target on iOS (where it is a plain
-  `View`), so Android pays for no extra native view.
+- Solid on Android remains the fallback below API 31, or if the blur target is missing.
 
 ## Unproven
-- **Real Android devices.** Everything on Android ran on one emulator (Pixel_10a image, API 37, which was also
-  crash-looping its own NFC and a HAL during the session). Glass-on-Android performance on hardware is unknown.
+- **Android devices beyond one.** Glass was verified smooth on one real phone (Android 16, API 36, a 720 by
+  1600 screen). Other devices, older Android versions (API 31 to 35) and slower phones are untested; Solid is the
+  fallback below API 31 and the constant is the switch if a device needs it.
 - **iOS beyond one screenshot:** real glass was seen on the iPhone 17 simulator in light mode only. Dark-mode
   glass, the Reduce Transparency toggle, and scroll smoothness on iOS were not exercised.
 - **Blur strength and tint** were tuned by eye on iOS, not measured against the Figma frames.
@@ -61,5 +63,4 @@
 - **Movie detail + Showtimes** slice.
 - **ADR 0006 needs an `expo-blur` row** in its native-module table (runs in Expo Go: yes). It lives in the
   server repo (`matinee-server/docs/decisions/`), so it is a small docs PR there; I did not make it.
-- Try Android glass on a real phone, then decide whether to flip `ANDROID_GLASS_ENABLED`.
 - The README's stack line still calls Reanimated "decided but not installed"; it was installed in the Browse slice.
