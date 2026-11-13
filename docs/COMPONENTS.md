@@ -277,7 +277,8 @@ Rules that apply to every component:
 |---|---|---|
 | Active | `active` | `home`, `tickets`, `account` |
 | Material | `reduceTransparency` | `false` = Glass (default), `true` = Solid fallback |
-| | `onNavigate(route)` | handler |
+| | `onNavigate(item)` | handler, called with `home`, `tickets` or `account` |
+| | `blurTarget` | Android only: ref to the `BlurTargetView` behind the bar. See "Built" below |
 
 - **Glass (default):** a frosted floating pill. Two layers:
   - Background blur of `primitives['blur/nav']` (24).
@@ -292,10 +293,14 @@ Rules that apply to every component:
   - With `text/secondary` labels the same tint would fail (2.36:1 in light and 2.46:1 in dark at these opacities), so the label colour and the tint opacity go together. The older 90% tint with `text/secondary` labels passed (5.36:1 and 4.89:1) but looked heavy.
   - The minimum tint with `text/primary` is about 50% in light and 65% in dark. If you lower the opacity, re-run the numbers first.
 - **Rules:** three items only (Home, Tickets, Account). Each item is at least 48 wide and tall. **Hidden during Seat selection and Checkout**, which have their own footer. Safe-area bottom inset applies.
-- **Code notes (to confirm when built):**
-  - Backdrop blur would come from `expo-blur`. Its blur strength is not the same unit as the 24 in Figma, so tune it by eye against the Gallery frames.
-  - On Android, backdrop blur is the less certain platform. As far as I know there is no system-wide "reduce transparency" flag on Android (the React Native `AccessibilityInfo.isReduceTransparencyEnabled` is iOS only). Fall back to Solid when blur isn't available.
-  - Adding `expo-blur` may need a new EAS native build. Tell Dave before that change (AGENTS.md).
+- **Built (glass-navbar slice).** Code: `src/components/NavBar.tsx`, decisions in `src/components/navBarLogic.ts` (pure, unit-tested).
+  - **Measurements from the Figma frame (`37:812`):** the pill is **56 tall in total**, not 56 plus padding: 4 (`space/1`) of padding all round, items 48 tall (4 + 24 icon + 16 caption + 4) with 12 (`space/3`) side padding, 4 between items, 16 (`space/4`) side margins. The hairline is drawn over the material rather than as a layout border, so it does not eat the padding.
+  - **Blur:** `expo-blur`'s `intensity` is not Figma's unit. It is `blur/nav` × 2 (48): a 12 px radius on Android (radius = intensity / 4, which is what Figma's 24 means in CSS terms) and a 1 to 100 strength on iOS. The thinnest built-in tint is used so `material/nav` does the colouring. Checked by eye against the Gallery frames on iOS only; light mode only so far.
+  - **iOS:** real glass, drawn when Reduce Transparency is off. `AccessibilityInfo.isReduceTransparencyEnabled` and its change event switch it to Solid live.
+  - **Android: Solid is what ships.** Real blur works but is switched off (`ANDROID_GLASS_ENABLED` in `navBarLogic.ts`) because it measurably slowed Home's scrolling on the only device it could be tried on, an emulator. Numbers in `docs/evidence/glass-navbar/README.md`. Solid is a designed state, not a failure. Android has no Reduce Transparency flag; below API 31 it would be Solid regardless.
+  - **If you turn Android glass on:** the NavBar **must be a sibling of the `BlurTargetView`, never inside it.** A `BlurView` inside the view it blurs makes the renderer recurse until the render thread's stack overflows (a native `SIGSEGV`, seen on the emulator). That is why the NavBar is drawn beside the tab screens (`src/app/(tabs)/_layout.tsx`) and not as the navigator's `tabBar`: Expo Router draws that bar inside the navigator next to the screens, with no way to wrap only the screens.
+  - **Text size:** labels scale with the system font size up to 1.3× (`maxFontSizeMultiplier`), so the 56 pill never grows far. The gap above the last content (`navBarClearance`) leaves room for the pill to grow a little. Beyond 1.3× the labels stop growing; that is a deliberate cap for a fixed-height navigation control.
+  - **Active item:** a filled `primary/default` pill with `text/on-primary` icon and label; each item is a button with a label and a `selected` state.
 
 ### BottomSheet
 - **Figma:** `BottomSheet` (`19:13`) with a content slot. **Code:** `BottomSheet`.
