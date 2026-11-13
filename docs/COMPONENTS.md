@@ -24,8 +24,6 @@ Rules that apply to every component:
 - Skeletons, never spinners on a blank screen.
 - Show a reason and a retry on every error.
 
-> **AGENTS.md says 44, Figma and this file use 48.** The 48 minimum was agreed for Android. AGENTS.md still says "touch targets ≥ 44×44". Align it in the same PR as this file.
-
 ---
 
 ## 1. Typography

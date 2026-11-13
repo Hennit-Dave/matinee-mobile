@@ -6,7 +6,7 @@ Approved on 10 November 2026.
 ## Source of truth
 
 - Figma file: https://www.figma.com/design/76VKO0l9gGt5YMNYtH8yvM
-- Code: `tokens.ts` (133 variables, checked to match Figma exactly)
+- Code: `tokens.ts` (154 variables, checked to match Figma exactly)
 - Rule: any token change is made in Figma and `tokens.ts` together.
 
 ## Colour
