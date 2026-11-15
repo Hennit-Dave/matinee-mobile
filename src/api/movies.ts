@@ -83,6 +83,20 @@ export interface MovieDetailFetchResult {
   cache: CacheStatus | null;
 }
 
+export interface Genre {
+  id: number;
+  name: string;
+}
+
+export interface GenresResponse {
+  genres: Genre[];
+}
+
+export interface GenresFetchResult {
+  data: GenresResponse;
+  cache: CacheStatus | null;
+}
+
 export function buildMovieDetailUrl(baseUrl: string, id: number): string {
   if (!Number.isInteger(id) || id < 1 || id > MAX_MOVIE_ID) {
     throw new MovieApiError('Invalid movie id.', {
@@ -143,6 +157,22 @@ export function buildSearchMoviesUrl(baseUrl: string, query: string, page = 1): 
   return `${baseUrl}/movies/search?${params.toString()}`;
 }
 
+export function buildGenresUrl(baseUrl: string): string {
+  return `${baseUrl}/genres`;
+}
+
+export function buildDiscoverMoviesUrl(baseUrl: string, genreId: number, page = 1): string {
+  if (!Number.isInteger(genreId) || genreId < 1 || genreId > MAX_MOVIE_ID) {
+    throw new MovieApiError('Invalid genre id.', {
+      status: 400,
+      kind: 'validation_failed',
+      retryable: false,
+    });
+  }
+  const safePage = Math.max(1, Math.min(MAX_PAGE, Math.trunc(page)));
+  return `${baseUrl}/movies/discover?genreId=${genreId}&page=${safePage}`;
+}
+
 function parseCacheHeader(header: string | null): CacheStatus | null {
   if (!header) return null;
   const lower = header.toLowerCase();
@@ -178,6 +208,18 @@ function isMovieDetail(value: unknown): value is MovieDetail {
     Array.isArray(record.genres) &&
     Array.isArray(record.cast)
   );
+}
+
+function isGenre(value: unknown): value is Genre {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.id === 'number' && typeof record.name === 'string';
+}
+
+function isGenresResponse(value: unknown): value is GenresResponse {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return Array.isArray(record.genres) && record.genres.every(isGenre);
 }
 
 export async function fetchApiJson<T>(
@@ -275,6 +317,22 @@ export async function fetchMovieDetail(
   baseUrl: string = readApiBaseUrl()
 ): Promise<MovieDetailFetchResult> {
   return fetchApiJson(buildMovieDetailUrl(baseUrl, id), isMovieDetail, signal);
+}
+
+export async function fetchGenres(
+  signal?: AbortSignal,
+  baseUrl: string = readApiBaseUrl()
+): Promise<GenresFetchResult> {
+  return fetchApiJson(buildGenresUrl(baseUrl), isGenresResponse, signal);
+}
+
+export async function fetchDiscoverMovies(
+  genreId: number,
+  page = 1,
+  signal?: AbortSignal,
+  baseUrl: string = readApiBaseUrl()
+): Promise<MoviesFetchResult> {
+  return fetchApiJson(buildDiscoverMoviesUrl(baseUrl, genreId, page), isMoviesPage, signal);
 }
 
 export function isServerOverloadedError(error: unknown): boolean {

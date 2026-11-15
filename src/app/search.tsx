@@ -1,21 +1,24 @@
 import { type Href, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatMovieMeta, normaliseSearchQuery } from '../api/movies';
-import { useSearchMovies } from '../api/useMovies';
-import { Button, EmptyState, Icon, Input, MovieCard, Skeleton, Text } from '../components';
+import { formatFilmCount, isOfflineNetworkError, resolveSearchMode } from '../api/searchHelpers';
+import { useDiscoverMovies, useGenres, useSearchMovies } from '../api/useMovies';
+import { Button, Chip, EmptyState, Icon, Input, SearchResultRow, Skeleton, Text } from '../components';
 import { useTheme } from '../theme';
 import { primitives } from '../tokens/tokens';
 
 const SEARCH_DEBOUNCE_MS = 300;
 const SKELETON_ROWS = [0, 1, 2, 3];
+const SKELETON_CHIPS = [84, 104, 76, 116, 72, 92];
 
 export default function Search() {
   const router = useRouter();
   const { colors } = useTheme();
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [selectedGenreId, setSelectedGenreId] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -24,8 +27,20 @@ export default function Search() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const { status, movies, error, isFetching, refetch } = useSearchMovies(debouncedQuery, 1);
   const normalised = normaliseSearchQuery(debouncedQuery);
+  const mode = resolveSearchMode(normalised, selectedGenreId);
+
+  const genresQuery = useGenres();
+  const textQuery = useSearchMovies(debouncedQuery, 1);
+  const discoverQuery = useDiscoverMovies(mode === 'genre' ? selectedGenreId : null, 1);
+  const activeQuery = mode === 'genre' ? discoverQuery : textQuery;
+  const { status, movies, totalResults, error, isFetching, refetch } = activeQuery;
+
+  const clearAll = () => {
+    setQuery('');
+    setDebouncedQuery('');
+    setSelectedGenreId(null);
+  };
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors['surface/default'] }]} edges={['top', 'bottom']}>
@@ -42,17 +57,20 @@ export default function Search() {
           >
             <Icon name="chevron-left" size="lg" color="text/primary" />
           </Pressable>
-          <Text variant="title" color="text/primary">
-            Search
-          </Text>
         </View>
 
         <Input
+          label="Search"
           leadingIcon="search"
-          placeholder="Search movies"
-          accessibilityLabel="Search movies"
+          placeholder="Film title"
+          accessibilityLabel="Search"
           value={query}
-          onChangeText={setQuery}
+          onChangeText={(text) => {
+            setQuery(text);
+            if (normaliseSearchQuery(text).length > 0 && selectedGenreId !== null) {
+              setSelectedGenreId(null);
+            }
+          }}
           onClear={() => {
             setQuery('');
             setDebouncedQuery('');
@@ -63,42 +81,99 @@ export default function Search() {
         />
       </View>
 
-      {status === 'idle' ? (
-        <View style={styles.idleWrap}>
-          <Text variant="body" color="text/secondary">
-            Type a movie title to search.
-          </Text>
+      {mode === 'idle' ? (
+        <ScrollView contentContainerStyle={styles.idleContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.genreSection}>
+            <Text variant="title" color="text/primary">
+              Browse by genre
+            </Text>
+
+            {genresQuery.isLoading ? (
+              <View style={styles.chipCloud}>
+                {SKELETON_CHIPS.map((width, index) => (
+                  <Skeleton
+                    key={index}
+                    shape="block"
+                    width={width}
+                    height={primitives['size/chip-height']}
+                  />
+                ))}
+              </View>
+            ) : null}
+
+            {genresQuery.isError ? (
+              <View
+                style={[
+                  styles.genreErrorRow,
+                  {
+                    backgroundColor: colors['surface/raised'],
+                    borderColor: colors['border/default'],
+                  },
+                ]}
+              >
+                <Text variant="body" color="text/secondary" style={styles.flexText}>
+                  {genresQuery.error?.message ?? 'Couldn’t load genres.'}
+                </Text>
+                <Button
+                  variant="text"
+                  label={genresQuery.isFetching ? 'Retrying…' : 'Retry'}
+                  loading={genresQuery.isFetching}
+                  onPress={genresQuery.refetch}
+                />
+              </View>
+            ) : null}
+
+            {!genresQuery.isLoading && !genresQuery.isError && genresQuery.genres.length > 0 ? (
+              <View style={styles.chipCloud}>
+                {genresQuery.genres.map((genre) => (
+                  <Chip
+                    key={genre.id}
+                    label={genre.name}
+                    selected={genre.id === selectedGenreId}
+                    onPress={() => setSelectedGenreId(genre.id)}
+                  />
+                ))}
+              </View>
+            ) : null}
+          </View>
+        </ScrollView>
+      ) : null}
+
+      {mode === 'genre' && genresQuery.genres.length > 0 ? (
+        <View style={styles.activeGenreBar}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeGenreRow}>
+            {genresQuery.genres.map((genre) => (
+              <Chip
+                key={genre.id}
+                label={genre.name}
+                selected={genre.id === selectedGenreId}
+                onPress={() => setSelectedGenreId((prev) => (prev === genre.id ? null : genre.id))}
+              />
+            ))}
+          </ScrollView>
         </View>
       ) : null}
 
-      {status === 'loading' ? (
+      {mode !== 'idle' && status === 'loading' ? (
         <View style={styles.skeletonList}>
+          <Skeleton shape="text" width={primitives['space/12']} height={12} />
           {SKELETON_ROWS.map((row) => (
-            <View
-              key={row}
-              style={[
-                styles.skeletonRow,
-                {
-                  backgroundColor: colors['surface/raised'],
-                  borderColor: colors['border/default'],
-                },
-              ]}
-            >
+            <View key={row} style={styles.skeletonRow}>
               <Skeleton
                 shape="block"
                 width={primitives['size/thumb-width']}
                 height={primitives['size/thumb-height']}
               />
               <View style={styles.skeletonCopy}>
-                <Skeleton shape="text" width="70%" />
-                <Skeleton shape="text" width="90%" />
+                <Skeleton shape="text" width={180} height={16} />
+                <Skeleton shape="text" width={120} height={12} />
               </View>
             </View>
           ))}
         </View>
       ) : null}
 
-      {status === 'server_overloaded' ? (
+      {mode !== 'idle' && status === 'server_overloaded' ? (
         <EmptyState
           icon="error"
           headline="Server overloaded"
@@ -108,56 +183,61 @@ export default function Search() {
         />
       ) : null}
 
-      {status === 'error' ? (
+      {mode !== 'idle' && status === 'error' ? (
         <EmptyState
           icon="error"
-          headline="Search failed"
-          body={error?.message ?? 'Check your connection and try again.'}
+          headline={isOfflineNetworkError(error) ? 'You’re offline' : 'Search failed'}
+          body={
+            isOfflineNetworkError(error)
+              ? 'Search needs a connection. Your saved tickets still open without one.'
+              : error?.message ?? 'Check your connection and try again.'
+          }
           actionLabel={isFetching ? 'Retrying…' : 'Try again'}
           onAction={refetch}
         />
       ) : null}
 
-      {status === 'empty' ? (
+      {mode !== 'idle' && status === 'empty' ? (
         <EmptyState
           icon="info"
-          headline="No results"
-          body={`No movies matched "${normalised}".`}
+          headline={mode === 'text' ? `No films match '${normalised}'` : 'No films in this genre'}
+          body="Check the spelling, or browse by genre instead."
           actionLabel="Clear search"
-          onAction={() => {
-            setQuery('');
-            setDebouncedQuery('');
-          }}
+          onAction={clearAll}
         />
       ) : null}
 
-      {status === 'ready' || status === 'offline_saved_data' ? (
+      {mode !== 'idle' && (status === 'ready' || status === 'offline_saved_data') ? (
         <FlatList
           data={movies}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
-            status === 'offline_saved_data' ? (
-              <View
-                style={[
-                  styles.offlineStrip,
-                  {
-                    backgroundColor: colors['surface/raised'],
-                    borderColor: colors['border/default'],
-                  },
-                ]}
-              >
-                <Text variant="body" color="text/secondary" style={styles.offlineText}>
-                  Movie data unavailable — showing saved data.
-                </Text>
-                <Button variant="text" label="Retry" loading={isFetching} onPress={refetch} />
-              </View>
-            ) : undefined
+            <View style={styles.resultsHeader}>
+              {status === 'offline_saved_data' ? (
+                <View
+                  style={[
+                    styles.offlineStrip,
+                    {
+                      backgroundColor: colors['surface/raised'],
+                      borderColor: colors['border/default'],
+                    },
+                  ]}
+                >
+                  <Text variant="body" color="text/secondary" style={styles.flexText}>
+                    Movie data unavailable — showing saved data.
+                  </Text>
+                  <Button variant="text" label="Retry" loading={isFetching} onPress={refetch} />
+                </View>
+              ) : null}
+              <Text variant="caption" color="text/secondary">
+                {formatFilmCount(totalResults, movies.length)}
+              </Text>
+            </View>
           }
           renderItem={({ item }) => (
-            <MovieCard
-              layout="list"
+            <SearchResultRow
               title={item.title}
               meta={formatMovieMeta(item)}
               posterUrl={item.posterUrl}
@@ -184,15 +264,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: primitives['space/6'],
+    paddingHorizontal: primitives['space/4'],
     paddingTop: primitives['space/2'],
-    paddingBottom: primitives['space/3'],
-    gap: primitives['space/3'],
+    paddingBottom: primitives['space/4'],
+    gap: primitives['space/2'],
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: primitives['space/2'],
   },
   backButton: {
     minWidth: primitives['size/touch-min'],
@@ -202,31 +281,55 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: -primitives['space/3'],
   },
-  idleWrap: {
-    paddingHorizontal: primitives['space/6'],
-    paddingTop: primitives['space/4'],
+  idleContent: {
+    paddingHorizontal: primitives['space/4'],
+    paddingTop: primitives['space/2'],
+    paddingBottom: primitives['space/6'],
+  },
+  genreSection: {
+    gap: primitives['space/3'],
+  },
+  chipCloud: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: primitives['space/2'],
+  },
+  genreErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: primitives['space/3'],
+    paddingRight: primitives['space/2'],
+    paddingVertical: primitives['space/1'],
+    borderRadius: primitives['radius/md'],
+    borderWidth: primitives['border-width/default'],
+    gap: primitives['space/2'],
+  },
+  activeGenreBar: {
+    paddingBottom: primitives['space/2'],
+  },
+  activeGenreRow: {
+    paddingHorizontal: primitives['space/4'],
+    gap: primitives['space/2'],
   },
   skeletonList: {
-    paddingHorizontal: primitives['space/6'],
-    paddingTop: primitives['space/2'],
+    paddingHorizontal: primitives['space/4'],
     gap: primitives['space/3'],
   },
   skeletonRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: primitives['space/3'],
-    padding: primitives['space/3'],
-    borderRadius: primitives['radius/md'],
-    borderWidth: primitives['border-width/default'],
   },
   skeletonCopy: {
     flex: 1,
     gap: primitives['space/2'],
   },
+  resultsHeader: {
+    gap: primitives['space/3'],
+  },
   listContent: {
-    paddingHorizontal: primitives['space/6'],
-    paddingTop: primitives['space/2'],
-    paddingBottom: primitives['space/8'],
+    paddingHorizontal: primitives['space/4'],
+    paddingBottom: primitives['space/6'],
     gap: primitives['space/3'],
   },
   offlineStrip: {
@@ -240,7 +343,7 @@ const styles = StyleSheet.create({
     borderWidth: primitives['border-width/default'],
     gap: primitives['space/2'],
   },
-  offlineText: {
+  flexText: {
     flex: 1,
   },
 });

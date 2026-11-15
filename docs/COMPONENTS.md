@@ -427,3 +427,8 @@ Rules that apply to every component:
 - Status bar in the frames is a placeholder.
 - Placeholder poster colours (`poster/*`) are design-only.
 - Gallery frames are documentation, not screens.
+
+### SearchResultRow
+- **Figma:** `Browse / Search / Results` row (`41:1474`). **Code:** `SearchResultRow`.
+- **Props:** `title: string`, `meta?: string`, `posterUrl: string | null`, `onPress?: () => void`.
+- **Tokens:** `size/thumb-width` (64) × `size/thumb-height` (96), `radius/sm`, `border-width/default`, `border/default`, `skeleton/base`, `space/3` gap, `space/1` text gap, `type/label-lg` (`text/primary`), `type/body` (`text/secondary`), `size/touch-min` minimum height.

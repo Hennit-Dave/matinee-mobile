@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { readApiBaseUrl } from './config';
 import {
+  fetchDiscoverMovies,
+  fetchGenres,
   fetchMovieDetail,
   fetchNowPlayingMovies,
   fetchPopularMovies,
@@ -8,6 +10,7 @@ import {
   normaliseSearchQuery,
   resolveMovieDetailViewStatus,
   resolveMoviesViewStatus,
+  type Genre,
   type MovieDetail,
   type MovieDetailViewStatus,
   type MoviesFetchResult,
@@ -167,4 +170,56 @@ export function useMovieDetail(movieId: number): UseMovieDetailResult {
       void query.refetch();
     },
   };
+}
+
+export interface UseGenresResult {
+  genres: Genre[];
+  isLoading: boolean;
+  isError: boolean;
+  isFetching: boolean;
+  error: Error | null;
+  refetch: () => void;
+}
+
+export function useGenres(): UseGenresResult {
+  const { baseUrl, configError } = safeReadBaseUrl();
+  const enabled = baseUrl !== null;
+
+  const query = useQuery({
+    queryKey: ['movies', 'genres', baseUrl],
+    enabled,
+    retry: false,
+    staleTime: ONE_DAY_MS,
+    gcTime: ONE_DAY_MS,
+    queryFn: ({ signal }) => fetchGenres(signal, baseUrl!),
+  });
+
+  const effectiveError = configError ?? (query.error instanceof Error ? query.error : null);
+  return {
+    genres: query.data?.data.genres ?? [],
+    isLoading: enabled && query.isPending && !query.data,
+    isError: (configError !== null || query.isError) && !query.data,
+    isFetching: query.isFetching,
+    error: effectiveError,
+    refetch: () => {
+      void query.refetch();
+    },
+  };
+}
+
+export function useDiscoverMovies(genreId: number | null, page = 1): UseMoviesResult {
+  const { baseUrl, configError } = safeReadBaseUrl();
+  const validGenre = genreId !== null && Number.isInteger(genreId) && genreId >= 1;
+  const enabled = baseUrl !== null && validGenre;
+
+  const query = useQuery({
+    queryKey: ['movies', 'discover', baseUrl, genreId, page],
+    enabled,
+    retry: false,
+    staleTime: ONE_MINUTE_MS,
+    gcTime: ONE_HOUR_MS,
+    queryFn: ({ signal }) => fetchDiscoverMovies(genreId!, page, signal, baseUrl!),
+  });
+
+  return toUseMoviesResult(enabled, query, configError);
 }
