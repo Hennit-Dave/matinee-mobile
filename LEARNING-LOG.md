@@ -28,3 +28,6 @@ Scrolling looked choppy on the emulator but felt smooth on my real phone. I lear
 
 The bar switches to a solid colour when Reduce Transparency is enabled or the device does not support the blur effect. It keeps navigation clear and usable while respecting accessibility settings and device limits.
 
+## Home redesign
+
+I rebuilt Home because my first version had a search bar and movie grid, while Figma showed a featured movie and a horizontal poster carousel. That gap happened because I built before checking the design. The hero poster was initially hidden because the SVG gradient rendered as a solid overlay; separating the RGB colour from its explicit opacity fixed the fade. Home and the detail screen now share one hero component, so fixes apply consistently to both. When the old grid briefly returned, the cause was an outdated local checkout and two running dev servers serving a stale bundle. I learned to check the branch, latest commit, and active dev server before assuming the code is broken.
