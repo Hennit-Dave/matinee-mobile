@@ -35,6 +35,8 @@ function RootContent() {
       <Stack.Screen name="search" />
       {/* Development-only check screen: not reachable from the tab bar. */}
       <Stack.Screen name="dev-health" />
+      {/* Hidden component gallery (RULES.md D3.4): unlinked, open it by its path, /gallery. */}
+      <Stack.Screen name="gallery" />
     </Stack>
   );
 }

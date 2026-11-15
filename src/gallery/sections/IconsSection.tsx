@@ -1,0 +1,85 @@
+import { StyleSheet, View } from 'react-native';
+import { Icon, Text, type IconName, type IconProps, type IconSize } from '../../components';
+import { primitives } from '../../tokens/tokens';
+import { GalleryGroup, GalleryItem, GalleryRow } from '../GalleryParts';
+
+const ICON_NAMES: readonly IconName[] = [
+  'search',
+  'close',
+  'info',
+  'error',
+  'success',
+  'chevron-left',
+  'chevron-right',
+  'home',
+  'ticket',
+  'user',
+];
+
+const SIZES: readonly IconSize[] = ['sm', 'md', 'lg'];
+
+const COLORS: readonly NonNullable<IconProps['color']>[] = [
+  'text/primary',
+  'text/secondary',
+  'text/disabled',
+  'status/error',
+  'status/warning',
+  'status/success',
+  'status/info',
+];
+
+export function IconsSection() {
+  return (
+    <GalleryGroup
+      name="Icon"
+      note="10 icons, 3 sizes (sm 16, md 20, lg 24), coloured by semantic token. Pass accessibilityLabel when an icon stands alone."
+    >
+      <GalleryItem label="All icons at sm, md and lg">
+        <View style={styles.grid}>
+          {ICON_NAMES.map((name) => (
+            <View key={name} style={styles.cell}>
+              <View style={styles.sizes}>
+                {SIZES.map((size) => (
+                  <Icon key={size} name={name} size={size} accessibilityLabel={`${name} icon, ${size}`} />
+                ))}
+              </View>
+              <Text variant="caption" color="text/secondary">
+                {name}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </GalleryItem>
+
+      <GalleryItem label="Colour tokens (the search icon, lg)">
+        <GalleryRow>
+          {COLORS.map((color) => (
+            <View key={color} style={styles.cell}>
+              <Icon name="search" size="lg" color={color} accessibilityLabel={`search icon in ${color}`} />
+              <Text variant="caption" color="text/secondary">
+                {color}
+              </Text>
+            </View>
+          ))}
+        </GalleryRow>
+      </GalleryItem>
+    </GalleryGroup>
+  );
+}
+
+const styles = StyleSheet.create({
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: primitives['space/4'],
+  },
+  cell: {
+    minWidth: primitives['space/16'],
+    gap: primitives['space/2'],
+  },
+  sizes: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: primitives['space/2'],
+  },
+});
