@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   MovieApiError,
   buildNowPlayingUrl,
+  buildPopularMoviesUrl,
   buildSearchMoviesUrl,
   formatMovieMeta,
   normaliseSearchQuery,
@@ -110,4 +111,14 @@ test('formatMovieMeta formats year and overview cleanly', () => {
   assert.equal(formatMovieMeta({ year: 2026, overview: null }), '2026');
   assert.equal(formatMovieMeta({ year: null, overview: 'A teaser.' }), 'A teaser.');
   assert.equal(formatMovieMeta({ year: null, overview: null }), '');
+});
+
+test('buildPopularMoviesUrl clamps page to 1..500 like the server PopularQuerySchema', () => {
+  const base = 'http://localhost:3000';
+  assert.equal(buildPopularMoviesUrl(base), `${base}/movies/popular?page=1`);
+  assert.equal(buildPopularMoviesUrl(base, 0), `${base}/movies/popular?page=1`);
+  assert.equal(buildPopularMoviesUrl(base, -4), `${base}/movies/popular?page=1`);
+  assert.equal(buildPopularMoviesUrl(base, 3), `${base}/movies/popular?page=3`);
+  assert.equal(buildPopularMoviesUrl(base, 2.9), `${base}/movies/popular?page=2`);
+  assert.equal(buildPopularMoviesUrl(base, 999), `${base}/movies/popular?page=500`);
 });

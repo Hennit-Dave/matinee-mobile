@@ -5,6 +5,7 @@ import {
   fetchGenres,
   fetchMovieDetail,
   fetchNowPlayingMovies,
+  fetchPopularMovies,
   fetchSearchMovies,
   normaliseSearchQuery,
   resolveMovieDetailViewStatus,
@@ -88,6 +89,22 @@ export function useNowPlayingMovies(page = 1): UseMoviesResult {
     staleTime: ONE_MINUTE_MS,
     gcTime: ONE_HOUR_MS,
     queryFn: ({ signal }) => fetchNowPlayingMovies(page, signal, baseUrl!),
+  });
+
+  return toUseMoviesResult(enabled, query, configError);
+}
+
+export function usePopularMovies(page = 1): UseMoviesResult {
+  const { baseUrl, configError } = safeReadBaseUrl();
+  const enabled = baseUrl !== null;
+
+  const query = useQuery({
+    queryKey: ['movies', 'popular', baseUrl, page],
+    enabled,
+    retry: false,
+    staleTime: ONE_MINUTE_MS,
+    gcTime: ONE_HOUR_MS,
+    queryFn: ({ signal }) => fetchPopularMovies(page, signal, baseUrl!),
   });
 
   return toUseMoviesResult(enabled, query, configError);
