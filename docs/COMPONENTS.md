@@ -111,6 +111,28 @@ Rules that apply to every component:
   - Placeholder posters in the designs use `poster/red`, `poster/green`, `poster/pale` and `poster/dark` from the Placeholder collection. They are design placeholders only and are not in `tokens.ts`.
   - Poster images need alt text (the film title).
 
+### SearchResultRow
+- **Figma:** `Browse / Search / Results` row (`41:1474`). **Code:** `SearchResultRow`.
+- **Props:** `title: string`, `meta?: string`, `posterUrl: string | null`, `onPress?: () => void`.
+- **Tokens:** `size/thumb-width` (64) × `size/thumb-height` (96), `radius/sm`, `border-width/default`, `border/default`, `skeleton/base`, `space/3` gap, `space/1` text gap, `type/label-lg` (`text/primary`), `type/body` (`text/secondary`), `size/touch-min` minimum height.
+
+### HeroBackdrop
+- **Figma:** the hero of Home (`40:1339`, 448 tall on a 360×800 frame, 512 on tall phones). **Code:** `HeroBackdrop`.
+- **Props:** `height: number`, `imageUrl?: string | null`, `fallbackImageUrl?: string | null`, `accessibilityLabel?: string` (alt text for the image), `loading?: boolean`, `children` (the content slot, pinned to the bottom).
+- **States:**
+
+| State | When |
+|---|---|
+| Loading | `loading`: a flat `skeleton/base` fill, for the screen's own skeleton |
+| Image loading | an image URL is set but has not loaded: a `Skeleton` block |
+| Image loaded | the image replaces the block, behind the gradients |
+| Fallback | the primary image fails: `fallbackImageUrl` is tried next |
+| No image | no usable URL: the `Skeleton` block stays |
+
+- **Tokens:** a fade from `surface/default-clear` to `surface/default` (stops at 30% and 92%) so the content below reads on the page colour, a status-bar scrim from `surface/scrim` to `surface/scrim-clear` (112 high), `skeleton/base`, `space/4` padding and `space/2` gap for the slot.
+- **Rules:** the image is drawn **behind** the gradients (the #18 fix). `react-native-svg` ignores the alpha inside `rgba(...)` on `stopColor`, so the stops go through `svgStopProps`, which splits a token into `rgb(...)` plus `stopOpacity`. Pass a movie title as `accessibilityLabel`.
+- **Used by:** Home hero (with `CrossfadeStack`) and the Movie detail hero.
+
 ### QR
 - **Figma:** `QR` (`59:3968`), 177×177. **Code:** `QRCode`.
 - **Props:** `value: string` (the ticket payload from the server), `size?: number` (default 177; Ticket detail scales it to 230).
@@ -428,7 +450,16 @@ Rules that apply to every component:
 - Placeholder poster colours (`poster/*`) are design-only.
 - Gallery frames are documentation, not screens.
 
-### SearchResultRow
-- **Figma:** `Browse / Search / Results` row (`41:1474`). **Code:** `SearchResultRow`.
-- **Props:** `title: string`, `meta?: string`, `posterUrl: string | null`, `onPress?: () => void`.
-- **Tokens:** `size/thumb-width` (64) × `size/thumb-height` (96), `radius/sm`, `border-width/default`, `border/default`, `skeleton/base`, `space/3` gap, `space/1` text gap, `type/label-lg` (`text/primary`), `type/body` (`text/secondary`), `size/touch-min` minimum height.
+---
+
+## 13. Component gallery (hidden screen)
+
+The in-app living style guide required by RULES.md D3.4. Every component in the library, in every state, in light and dark, with mock data and no network.
+
+- **Open it:** it is not linked from the app. Go to the path `/gallery`. In a dev build use `matinee://gallery`; in Expo Go use `exp://<host>:8081/--/gallery` (for example `adb shell am start -a android.intent.action.VIEW -d "exp://127.0.0.1:8081/--/gallery" host.exp.exponent`).
+- **Code:** the route is `src/app/gallery.tsx`. The sections live in `src/gallery/` (not under `src/app/`, so they are not routes). What the gallery covers is declared in `src/gallery/registry.ts`.
+- **Light and dark:** the System / Light / Dark chips at the top switch the whole app with the platform's own override (`Appearance.setColorScheme`); the gallery hands control back to the device setting when it closes.
+- **Sections follow the Figma Gallery page (`73:3973`):** Typography, Buttons, Cards and posters, Selection and labels, Input, Feedback, Navigation and sheets, plus Icons and Motion for components Figma draws no gallery frame for.
+- **States that are not props** (pressed, focused) cannot be drawn statically, so the gallery says how to see them (press and hold a button, tap a field).
+- **Rule: a new component is not done until it is in the gallery.** `src/gallery/registry.test.ts` fails CI if a component is exported from `src/components/index.ts` without an entry in `GALLERY_SECTIONS`, or if a component is listed as planned after it has been built.
+- **Not built yet:** Card, QRCode, Badge, Switch, ListRow, Toast, Countdown, Seat and SeatMap are specified above and drawn in Figma but do not exist in code, so they are listed at the bottom of the gallery rather than shown. Move each into a section when it is built.
