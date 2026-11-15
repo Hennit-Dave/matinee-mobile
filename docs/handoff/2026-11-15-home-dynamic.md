@@ -41,4 +41,4 @@ Two enhancements layered on the Figma-faithful Home from PR #19: a "Popular" car
 - No Figma frame exists for a Popular row. It reuses the Now playing section styling; the closest frame, "Coming soon" (`40:1381`), uses poster+title cards.
 
 ## Next
-- **Dave:** review and squash-merge. This branch edits some of the same files as the Search v2 PR (#21), so it needs a rebase onto `main` once #21 is merged.
+- **Dave:** review and squash-merge. `main` (including Search v2, #21) has been merged into this branch with no conflicts; typecheck, lint and all 65 tests pass on the combined code.
