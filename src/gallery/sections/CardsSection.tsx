@@ -1,9 +1,18 @@
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, HeroBackdrop, MovieCard, SearchResultRow, Skeleton, Text } from '../../components';
+import {
+  Badge,
+  Button,
+  Card,
+  HeroBackdrop,
+  MovieCard,
+  SearchResultRow,
+  Skeleton,
+  Text,
+} from '../../components';
 import { primitives } from '../../tokens/tokens';
 import { GalleryGroup, GalleryItem } from '../GalleryParts';
-import { MOCK_META, MOCK_TITLES } from '../mocks';
+import { MOCK_CINEMA, MOCK_META, MOCK_TITLES } from '../mocks';
 import { MOCK_HERO_IMAGE, MOCK_POSTERS } from '../posterImages';
 
 const noop = () => {};
@@ -22,6 +31,33 @@ function CardRow({ children }: { children: ReactNode }) {
 export function CardsSection() {
   return (
     <>
+      <GalleryGroup
+        name="Card"
+        note="A raised surface with a content slot. Light mode shows height with elevation/1; dark mode shows it with surface/raised and a hairline border. Put any content in the slot."
+      >
+        <GalleryItem label="cinema card: title and body">
+          <Card title={MOCK_CINEMA.name} body={MOCK_CINEMA.showing} />
+        </GalleryItem>
+        <GalleryItem label="long title and body wrap">
+          <Card title={MOCK_TITLES.long} body={MOCK_META.long} />
+        </GalleryItem>
+        <GalleryItem label="ticket row: a Badge and a note in the slot (a TicketCard composition)">
+          <Card title={MOCK_TITLES.regular} body={`${MOCK_CINEMA.name} · Sat 14 Nov, 19:30`}>
+            <View style={styles.slotRow}>
+              <Badge tone="success" label="Confirmed" />
+              <Text variant="caption" color="text/secondary">
+                {MOCK_CINEMA.ticketNote}
+              </Text>
+            </View>
+          </Card>
+        </GalleryItem>
+        <GalleryItem label="slot with an action">
+          <Card title={MOCK_TITLES.short} body={MOCK_CINEMA.showing}>
+            <Button variant="secondary" label="Show ticket" onPress={noop} />
+          </Card>
+        </GalleryItem>
+      </GalleryGroup>
+
       <GalleryGroup
         name="MovieCard"
         note="3 layouts. A missing or failed poster falls back to the title on a skeleton fill. Poster layouts are 128×192; list is a 64×96 thumb."
@@ -167,6 +203,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   stack: {
+    gap: primitives['space/3'],
+  },
+  slotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: primitives['space/3'],
   },
 });

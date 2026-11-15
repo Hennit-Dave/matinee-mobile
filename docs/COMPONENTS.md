@@ -92,6 +92,7 @@ Rules that apply to every component:
   - **Cinema card:** title and body only (Showtimes).
   - **Ticket row:** a `Badge` plus a text note in the slot (Tickets tab). Build it as a `TicketCard` composition. It is not a separate component.
 - In dark mode elevation is shown by surface and border, not shadow. `shadow/*` is transparent there.
+- **Built (components-badge-card-toast slice).** Code: `src/components/Card.tsx` (props: `title`, `body`, `children?`). Measured from Figma `18:2`: padding `space/4`, content gap `space/2`, radius `radius/lg`, a `border-width/default` hairline in `border/default`, fill `surface/raised`. The Figma instance is 328 wide; in code the card fills its parent. `children` render below the body in the same `space/2` stack, so a Badge and a note, or a Button, fit the slot. It is not interactive and has no accessibility role of its own: its title and body are read as text, and anything in the slot keeps its own role.
 
 ### MovieCard
 - **Figma:** `MovieCard` (`18:18`), 3 layouts. **Code:** `MovieCard`.
@@ -181,6 +182,7 @@ Rules that apply to every component:
 
 - Radius `radius/sm`, `border-width/default`, label `type/caption`. Padding `space/1` and `space/2`.
 - **Rule:** the label carries the meaning ("Confirming", "Cancelled"). Tone is only reinforcement.
+- **Built (components-badge-card-toast slice).** Code: `src/components/Badge.tsx`, tone table in `src/components/badgeLogic.ts` (pure, unit-tested). Props: `tone?` (default `neutral`), `label`, `accessibilityLabel?` (defaults to the label). Not interactive: it is one accessible element with role `text`, sized to its content. **Contrast, checked in `badgeLogic.test.ts`:** every tone's label colour meets 4.5:1 on `surface/default`, `surface/raised` and `surface/overlay`, in light and dark.
 
 ### Switch
 - **Figma:** `Switch` (`66:3974`) 52×32. **Code:** `Switch`.
@@ -257,6 +259,12 @@ Rules that apply to every component:
 - **Props:** `tone: 'info' | 'success' | 'error'`, `message: string`, `action?: { label, onPress }`.
 - **Tokens:** `surface/overlay`, `border/default`, `radius/md`, `text/primary`, `type/body`, `elevation/2` (`shadow/2`), `size/icon-md` icon (Info, Success or Error), action uses `Button` text variant.
 - **Rule:** place it **above the footer** so it never covers content or the main button. Tone is shown by the icon shape as well as colour.
+- **Built (components-badge-card-toast slice).** Code: `src/components/Toast.tsx` (the visual), `ToastProvider.tsx` (`ToastProvider` and `useToast`), and `toastLogic.ts` (pure, unit-tested). Measured from Figma `18:94`: minimum height 56, padding `space/4` across and `space/2` down, gap `space/3`, radius `radius/md`, `border-width/default` in `border/default`, fill `surface/overlay`, `elevation/2`. The action is a `Button` text variant (48 minimum touch target).
+  - **Showing one:** mount `ToastProvider` once, inside the `SafeAreaProvider` (the root layout does). Anywhere below it, `const toast = useToast()` then `toast.show({ message, tone?, action?, duration?, bottomOffset? })`, or `toast.dismiss()`. One toast shows at a time: a new one replaces the current one and restarts the timer. There is no data model and nothing is stored.
+  - **Auto-dismiss:** 4 s for a plain message, 6 s for an error or a toast with an action (the person needs time to read and decide). An explicit `duration` is used but never below 2 s. Pressing the action runs it and dismisses the toast.
+  - **Placement:** `bottomOffset` is the distance from the screen bottom to the toast's bottom edge. A screen with its own footer passes the footer's height so the toast never covers the main button; the default sits one gap above the floating NavBar.
+  - **Accessibility:** icon and message are one spoken unit with the tone said first ("Error. Payment failed."), since the icon shape is not visible to a screen reader. Android reads it through a polite live region; iOS gets an explicit announcement. The action stays a separate focusable button. Message text is 4.5:1 on `surface/overlay` and each tone's icon is at least 3:1 (tested).
+  - **Motion:** it rises into place while fading in (`duration/base`) and drops away while fading out (`duration/fast`), using Reanimated's `FadeInDown` / `FadeOutDown`. With OS reduce-motion on, it appears and disappears without animation. Not in Figma: the frames show only the static toast.
 
 ### Skeleton
 - **Figma:** `Skeleton` (`18:70`), 4 shapes × 2 phases. **Code:** `Skeleton`.
@@ -462,4 +470,4 @@ The in-app living style guide required by RULES.md D3.4. Every component in the 
 - **Sections follow the Figma Gallery page (`73:3973`):** Typography, Buttons, Cards and posters, Selection and labels, Input, Feedback, Navigation and sheets, plus Icons and Motion for components Figma draws no gallery frame for.
 - **States that are not props** (pressed, focused) cannot be drawn statically, so the gallery says how to see them (press and hold a button, tap a field).
 - **Rule: a new component is not done until it is in the gallery.** `src/gallery/registry.test.ts` fails CI if a component is exported from `src/components/index.ts` without an entry in `GALLERY_SECTIONS`, or if a component is listed as planned after it has been built.
-- **Not built yet:** Card, QRCode, Badge, Switch, ListRow, Toast, Countdown, Seat and SeatMap are specified above and drawn in Figma but do not exist in code, so they are listed at the bottom of the gallery rather than shown. Move each into a section when it is built.
+- **Not built yet:** QRCode, Switch, ListRow, Countdown, Seat and SeatMap are specified above and drawn in Figma but do not exist in code, so they are listed at the bottom of the gallery rather than shown. Move each into a section when it is built.
