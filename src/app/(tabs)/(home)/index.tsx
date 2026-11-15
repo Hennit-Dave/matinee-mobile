@@ -1,63 +1,80 @@
 import { type Href, useRouter } from 'expo-router';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNowPlayingMovies } from '../../../api/useMovies';
-import { Button, EmptyState, Icon, MovieCard, Skeleton, Text, useNavBarClearance } from '../../../components';
+import { FlatList, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  composeFeaturedMeta,
+  resolveHeroHeight,
+  resolveHeroImageCandidates,
+  selectFeaturedMovie,
+} from '../../../api/homeHelpers';
+import { useMovieDetail, useNowPlayingMovies } from '../../../api/useMovies';
+import {
+  Button,
+  EmptyState,
+  HeroBackdrop,
+  Icon,
+  MovieCard,
+  Skeleton,
+  Text,
+  useNavBarClearance,
+} from '../../../components';
 import { useTheme } from '../../../theme';
 import { primitives } from '../../../tokens/tokens';
 
-const SKELETON_ITEMS = [0, 1, 2, 3, 4, 5];
+const SKELETON_CARDS = [0, 1, 2];
 
 export default function Home() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { colors } = useTheme();
-  // The list runs behind the floating NavBar; this keeps its last row (and the static states) clear of it.
   const navClearance = useNavBarClearance();
+
+  const heroHeight = resolveHeroHeight(windowHeight);
+  const searchTop = Math.max(insets.top + primitives['space/2'], primitives['space/8']);
+
   const { status, movies, error, isFetching, refetch } = useNowPlayingMovies(1);
+  const featured = selectFeaturedMovie(movies);
+  const { detail: featuredDetail } = useMovieDetail(featured?.id ?? 0);
+
+  const heroImages = featured
+    ? resolveHeroImageCandidates(featured, featuredDetail)
+    : { primaryUrl: null, fallbackUrl: null };
+  const featuredMeta = featured ? composeFeaturedMeta(featured, featuredDetail) : '';
 
   return (
-    <SafeAreaView style={[styles.screen, { backgroundColor: colors['surface/default'] }]} edges={['top']}>
-      <View style={styles.header}>
-        <Text variant="display" color="text/primary">
-          Matinee
-        </Text>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Search movies"
-          onPress={() => router.push('/search' as Href)}
-          style={({ pressed }) => [
-            styles.searchEntry,
-            {
-              backgroundColor: pressed ? colors['secondary/pressed'] : colors['surface/raised'],
-              borderColor: colors['border/strong'],
-            },
-          ]}
-        >
-          <Icon name="search" size="md" color="text/secondary" />
-          <Text variant="body-lg" color="text/secondary">
-            Search movies
-          </Text>
-        </Pressable>
-
-        <Text variant="title" color="text/primary" style={styles.sectionTitle}>
-          Now playing
-        </Text>
-      </View>
-
+    <View style={[styles.screen, { backgroundColor: colors['surface/default'] }]}>
       {status === 'loading' ? (
-        <View style={[styles.skeletonGrid, { paddingBottom: navClearance }]}>
-          {SKELETON_ITEMS.map((item) => (
-            <View key={item} style={styles.skeletonCard}>
-              <Skeleton shape="poster" />
-              <Skeleton shape="text" width={primitives['size/poster-width']} />
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: navClearance }]}>
+          <HeroBackdrop loading height={heroHeight}>
+            <Skeleton shape="text" width={240} height={primitives['space/6']} />
+            <Skeleton shape="text" width={180} height={14} />
+            <Skeleton shape="block" width="100%" height={primitives['size/touch-min']} />
+          </HeroBackdrop>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Skeleton shape="text" width={140} height={20} />
             </View>
-          ))}
-        </View>
+            <View style={styles.skeletonRow}>
+              {SKELETON_CARDS.map((item) => (
+                <Skeleton key={item} shape="poster" />
+              ))}
+            </View>
+          </View>
+        </ScrollView>
       ) : null}
 
       {status === 'server_overloaded' ? (
-        <View style={{ flex: 1, paddingBottom: navClearance }}>
+        <View
+          style={[
+            styles.stateWrap,
+            {
+              paddingTop: searchTop + primitives['size/touch-min'],
+              paddingBottom: navClearance,
+            },
+          ]}
+        >
           <EmptyState
             icon="error"
             headline="Server overloaded"
@@ -69,7 +86,15 @@ export default function Home() {
       ) : null}
 
       {status === 'error' ? (
-        <View style={{ flex: 1, paddingBottom: navClearance }}>
+        <View
+          style={[
+            styles.stateWrap,
+            {
+              paddingTop: searchTop + primitives['size/touch-min'],
+              paddingBottom: navClearance,
+            },
+          ]}
+        >
           <EmptyState
             icon="error"
             headline="Couldn’t load movies"
@@ -81,63 +106,115 @@ export default function Home() {
       ) : null}
 
       {status === 'empty' ? (
-        <View style={{ flex: 1, paddingBottom: navClearance }}>
+        <View
+          style={[
+            styles.stateWrap,
+            {
+              paddingTop: searchTop + primitives['size/touch-min'],
+              paddingBottom: navClearance,
+            },
+          ]}
+        >
           <EmptyState
             icon="info"
-            headline="No movies showing"
-            body="There are no now-playing films to show right now."
+            headline="Nothing’s showing yet"
+            body="New films are added every week. Check back soon, or search for a title."
             actionLabel="Refresh"
             onAction={refetch}
           />
         </View>
       ) : null}
 
-      {status === 'ready' || status === 'offline_saved_data' ? (
-        <FlatList
-          data={movies}
-          keyExtractor={(item) => String(item.id)}
-          numColumns={2}
-          columnWrapperStyle={styles.gridRow}
-          contentContainerStyle={[styles.listContent, { paddingBottom: navClearance }]}
-          ListHeaderComponent={
-            status === 'offline_saved_data' ? (
-              <View
-                style={[
-                  styles.offlineStrip,
-                  {
-                    backgroundColor: colors['surface/raised'],
-                    borderColor: colors['border/default'],
-                  },
-                ]}
-              >
-                <Text variant="body" color="text/secondary" style={styles.offlineText}>
-                  Movie data unavailable — showing saved data.
-                </Text>
-                <Button variant="text" label="Retry" loading={isFetching} onPress={refetch} />
-              </View>
-            ) : undefined
-          }
-          renderItem={({ item }) => (
-            <MovieCard
-              layout="poster-title"
-              title={item.title}
-              meta={item.year ? String(item.year) : undefined}
-              posterUrl={item.posterUrl}
+      {(status === 'ready' || status === 'offline_saved_data') && featured ? (
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: navClearance }]}>
+          <HeroBackdrop
+            height={heroHeight}
+            imageUrl={heroImages.primaryUrl}
+            fallbackImageUrl={heroImages.fallbackUrl}
+            accessibilityLabel={`${featured.title} poster`}
+          >
+            <Text variant="display" color="text/primary">
+              {featured.title}
+            </Text>
+            <Text variant="body" color="text/secondary">
+              {featuredMeta}
+            </Text>
+            <Button
+              variant="primary"
+              fullWidth
+              label="See showtimes"
               onPress={() =>
                 router.push({
-                  pathname: '/movie/[id]',
+                  pathname: '/movie/[id]/showtimes',
                   params: {
-                    id: String(item.id),
-                    title: item.title,
-                    posterUrl: item.posterUrl ?? '',
+                    id: String(featured.id),
+                    title: featured.title,
                   },
                 } as unknown as Href)
               }
             />
-          )}
-        />
+          </HeroBackdrop>
+
+          {status === 'offline_saved_data' ? (
+            <View style={styles.offlineBanner}>
+              <Icon name="info" size="md" color="text/secondary" />
+              <Text variant="body" color="text/secondary" style={styles.offlineText}>
+                You&apos;re offline. Showing saved films.
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text variant="title" color="text/primary">
+                Now playing
+              </Text>
+            </View>
+
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={movies}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={styles.carouselContent}
+              renderItem={({ item }) => (
+                <MovieCard
+                  layout="poster"
+                  title={item.title}
+                  posterUrl={item.posterUrl}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/movie/[id]',
+                      params: {
+                        id: String(item.id),
+                        title: item.title,
+                        posterUrl: item.posterUrl ?? '',
+                      },
+                    } as unknown as Href)
+                  }
+                />
+              )}
+            />
+          </View>
+        </ScrollView>
       ) : null}
-    </SafeAreaView>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Search movies"
+        onPress={() => router.push('/search' as Href)}
+        style={({ pressed }) => [
+          styles.searchButton,
+          {
+            top: searchTop,
+            backgroundColor: pressed ? colors['secondary/pressed'] : colors['surface/overlay'],
+            borderColor: colors['border/default'],
+          },
+        ]}
+      >
+        <Icon name="search" size="md" color="text/primary" />
+      </Pressable>
+    </View>
   );
 }
 
@@ -145,55 +222,46 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: primitives['space/6'],
-    paddingTop: primitives['space/4'],
-    gap: primitives['space/4'],
+  scrollContent: {
+    gap: primitives['space/8'],
   },
-  searchEntry: {
-    minHeight: primitives['size/input-height'],
-    borderRadius: primitives['radius/md'],
-    borderWidth: primitives['border-width/default'],
-    paddingHorizontal: primitives['space/3'],
+  section: {
+    gap: primitives['space/3'],
+  },
+  sectionHeader: {
+    paddingHorizontal: primitives['space/4'],
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    paddingHorizontal: primitives['space/4'],
+    gap: primitives['space/3'],
+    overflow: 'hidden',
+  },
+  carouselContent: {
+    paddingHorizontal: primitives['space/4'],
+    gap: primitives['space/3'],
+  },
+  offlineBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: primitives['space/2'],
-  },
-  sectionTitle: {
-    marginTop: primitives['space/2'],
-  },
-  skeletonGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingHorizontal: primitives['space/6'],
-    paddingTop: primitives['space/4'],
-    gap: primitives['space/4'],
-  },
-  skeletonCard: {
-    gap: primitives['space/2'],
-  },
-  listContent: {
-    paddingHorizontal: primitives['space/6'],
-    paddingTop: primitives['space/4'],
-    gap: primitives['space/4'],
-  },
-  gridRow: {
-    justifyContent: 'space-between',
-    gap: primitives['space/4'],
-  },
-  offlineStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingLeft: primitives['space/3'],
-    paddingRight: primitives['space/2'],
-    paddingVertical: primitives['space/1'],
-    borderRadius: primitives['radius/md'],
-    borderWidth: primitives['border-width/default'],
+    paddingHorizontal: primitives['space/4'],
+    paddingVertical: primitives['space/2'],
     gap: primitives['space/2'],
   },
   offlineText: {
     flex: 1,
+  },
+  stateWrap: {
+    flex: 1,
+  },
+  searchButton: {
+    position: 'absolute',
+    right: primitives['space/4'],
+    width: primitives['size/touch-min'],
+    height: primitives['size/touch-min'],
+    borderRadius: primitives['radius/full'],
+    borderWidth: primitives['border-width/default'],
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

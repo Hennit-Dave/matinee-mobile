@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
-import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import {
   composeMovieMetaLine,
   formatReleaseDate,
@@ -13,6 +12,7 @@ import {
   BottomSheet,
   Button,
   EmptyState,
+  HeroBackdrop,
   Icon,
   Skeleton,
   Text,
@@ -22,62 +22,7 @@ import { useTheme } from '../../../../../theme';
 import { primitives } from '../../../../../tokens/tokens';
 
 const HERO_HEIGHT = 448;
-const STATUS_SCRIM_HEIGHT = 112;
 const FACT_LABEL_WIDTH = 96;
-
-/**
- * react-native-svg ignores the alpha channel inside `rgba(r, g, b, a)` on `stopColor` unless
- * `stopOpacity` is passed explicitly. Splitting `rgba(...)` into `rgb(...)` + `stopOpacity` keeps
- * all gradient stops token-driven while rendering true transparency.
- */
-function svgStopProps(tokenColor: string): { stopColor: string; stopOpacity: number } {
-  const match = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([0-9.]+)\s*)?\)$/i.exec(
-    tokenColor.trim()
-  );
-  if (!match) {
-    return { stopColor: tokenColor, stopOpacity: 1 };
-  }
-  const [, r, g, b, alpha] = match;
-  return {
-    stopColor: `rgb(${r}, ${g}, ${b})`,
-    stopOpacity: alpha !== undefined ? Number(alpha) : 1,
-  };
-}
-
-function HeroGradients() {
-  const { colors } = useTheme();
-  const fadeStart = svgStopProps(colors['surface/default-clear']);
-  const fadeEnd = svgStopProps(colors['surface/default']);
-  const scrimStart = svgStopProps(colors['surface/scrim']);
-  const scrimEnd = svgStopProps(colors['surface/scrim-clear']);
-
-  return (
-    <>
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <Svg width="100%" height="100%">
-          <Defs>
-            <LinearGradient id="heroFadeToSurface" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0.3" stopColor={fadeStart.stopColor} stopOpacity={fadeStart.stopOpacity} />
-              <Stop offset="0.92" stopColor={fadeEnd.stopColor} stopOpacity={fadeEnd.stopOpacity} />
-            </LinearGradient>
-          </Defs>
-          <Rect x="0" y="0" width="100%" height="100%" fill="url(#heroFadeToSurface)" />
-        </Svg>
-      </View>
-      <View pointerEvents="none" style={styles.statusScrim}>
-        <Svg width="100%" height="100%">
-          <Defs>
-            <LinearGradient id="heroStatusScrim" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={scrimStart.stopColor} stopOpacity={scrimStart.stopOpacity} />
-              <Stop offset="1" stopColor={scrimEnd.stopColor} stopOpacity={scrimEnd.stopOpacity} />
-            </LinearGradient>
-          </Defs>
-          <Rect x="0" y="0" width="100%" height="100%" fill="url(#heroStatusScrim)" />
-        </Svg>
-      </View>
-    </>
-  );
-}
 
 export default function MovieDetailScreen() {
   const router = useRouter();
@@ -91,13 +36,10 @@ export default function MovieDetailScreen() {
   const paramPosterUrl = typeof params.posterUrl === 'string' && params.posterUrl ? params.posterUrl : null;
 
   const { status, detail, error, isFetching, refetch } = useMovieDetail(movieId);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [backdropFailed, setBackdropFailed] = useState(false);
   const [sheetVisible, setSheetVisible] = useState(false);
 
   const fallbackPosterUrl = detail?.posterUrl ?? paramPosterUrl;
-  const heroImageUrl =
-    !backdropFailed && detail?.backdropUrl ? detail.backdropUrl : fallbackPosterUrl;
+  const primaryHeroUrl = detail?.backdropUrl ?? fallbackPosterUrl;
   const displayTitle = detail?.title ?? paramTitle;
   const metaLine = detail ? composeMovieMetaLine(detail) : '';
 
@@ -118,13 +60,11 @@ export default function MovieDetailScreen() {
     <View style={[styles.screen, { backgroundColor: colors['surface/default'] }]}>
       {status === 'loading' ? (
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: navClearance }]}>
-          <View style={styles.hero}>
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors['skeleton/base'] }]} />
-            <HeroGradients />
+          <HeroBackdrop loading height={HERO_HEIGHT}>
             <Skeleton shape="text" width={240} height={24} />
             <Skeleton shape="text" width={200} height={14} />
             <Skeleton shape="block" width="100%" height={primitives['size/touch-min']} />
-          </View>
+          </HeroBackdrop>
           <View style={styles.about}>
             <Skeleton shape="text" width="100%" height={14} />
             <Skeleton shape="text" width="85%" height={14} />
@@ -171,30 +111,12 @@ export default function MovieDetailScreen() {
 
       {(status === 'ready' || status === 'offline_saved_data') && detail ? (
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: navClearance }]}>
-          <View style={styles.hero}>
-            {!imageLoaded || !heroImageUrl ? (
-              <View style={styles.heroMediaFill}>
-                <Skeleton shape="block" width="100%" height={HERO_HEIGHT} />
-              </View>
-            ) : null}
-            {heroImageUrl ? (
-              <Image
-                source={{ uri: heroImageUrl }}
-                resizeMode="cover"
-                accessibilityLabel={`${displayTitle} poster`}
-                onLoad={() => setImageLoaded(true)}
-                onError={() => {
-                  if (!backdropFailed && detail?.backdropUrl && heroImageUrl === detail.backdropUrl && fallbackPosterUrl) {
-                    setBackdropFailed(true);
-                  } else {
-                    setImageLoaded(true);
-                  }
-                }}
-                style={styles.heroMediaFill}
-              />
-            ) : null}
-            <HeroGradients />
-
+          <HeroBackdrop
+            height={HERO_HEIGHT}
+            imageUrl={primaryHeroUrl}
+            fallbackImageUrl={detail?.backdropUrl ? fallbackPosterUrl : null}
+            accessibilityLabel={`${displayTitle} poster`}
+          >
             <Text variant="display" color="text/primary">
               {displayTitle}
             </Text>
@@ -217,7 +139,7 @@ export default function MovieDetailScreen() {
                 } as unknown as Href)
               }
             />
-          </View>
+          </HeroBackdrop>
 
           {status === 'offline_saved_data' ? (
             <View style={styles.offlineBanner}>
@@ -295,24 +217,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     gap: primitives['space/6'],
-  },
-  hero: {
-    height: HERO_HEIGHT,
-    width: '100%',
-    overflow: 'hidden',
-    padding: primitives['space/4'],
-    justifyContent: 'flex-end',
-    gap: primitives['space/2'],
-  },
-  heroMediaFill: {
-    ...StyleSheet.absoluteFill,
-  },
-  statusScrim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: STATUS_SCRIM_HEIGHT,
   },
   offlineBanner: {
     flexDirection: 'row',
