@@ -142,6 +142,7 @@ Rules that apply to every component:
   - Shape `radius/full`, height `size/chip-height` (32), `border-width/default`, label `type/label`, note `type/caption`.
 - **Hit slop:** the pill is 32 high, the tap area is 48 (`size/touch-min`). Selected is told apart by fill and text colour. Add `accessibilityState={{ selected }}`.
 - **Tabular figures:** on for showtime labels.
+- **Built (movie-detail-screen slice).** Code: `src/components/Chip.tsx` (props: `label`, `selected?`, `disabled?`, `note?`, `tabularNums?`, `accessibilityLabel?`, `onPress?`). Uses `space/2` vertical wrapper padding so the pill stays 32 high inside a 48px touch target.
 
 ### Badge
 - **Figma:** `Badge` (`17:134`). **Code:** `Badge`.
@@ -310,6 +311,7 @@ Rules that apply to every component:
   - **Standard:** headline in `title-lg`, one body paragraph, **one Primary** action. Examples: Hold expired ("Choose seats again"), Accessible seat.
   - **Destructive:** headline in `title-lg`, one paragraph saying what happens, the **safe action as Primary** ("Keep my account", "Stay signed in") and the **destructive action as Secondary** ("Delete my account", "Sign out"). Never make the destructive action the solid button and never use red for it.
 - **Suggested, not drawn in Figma:** dismiss by drag, back button and scrim tap, except Hold expired, which should require its one action. Animate with Reanimated using `duration/base`, `easing/enter` in and `easing/exit` out. Confirm both when the component is built.
+- **Built (movie-detail-screen slice).** Code: `src/components/BottomSheet.tsx` (props: `visible`, `onClose`, `accessibilityLabel?`, `children`). Dismisses via scrim tap, handle drag-down (`PanResponder`), or system back action. Uses `Modal` fade + `surface/scrim` + `surface/overlay` + `elevation/3`.
 
 ---
 

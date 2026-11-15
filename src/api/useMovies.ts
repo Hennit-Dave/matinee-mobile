@@ -1,10 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { readApiBaseUrl } from './config';
 import {
+  fetchMovieDetail,
   fetchNowPlayingMovies,
   fetchSearchMovies,
   normaliseSearchQuery,
+  resolveMovieDetailViewStatus,
   resolveMoviesViewStatus,
+  type MovieDetail,
+  type MovieDetailViewStatus,
   type MoviesFetchResult,
   type MoviesViewStatus,
 } from './movies';
@@ -12,7 +16,7 @@ import {
 const ONE_MINUTE_MS = 60_000;
 const ONE_HOUR_MS = 60 * ONE_MINUTE_MS;
 
-function safeReadBaseUrl(): { baseUrl: string | null; configError: Error | null } {
+export function safeReadBaseUrl(): { baseUrl: string | null; configError: Error | null } {
   try {
     return { baseUrl: readApiBaseUrl(), configError: null };
   } catch (err) {
@@ -101,4 +105,49 @@ export function useSearchMovies(rawQuery: string, page = 1): UseMoviesResult {
   });
 
   return toUseMoviesResult(enabled, query, configError);
+}
+
+export interface UseMovieDetailResult {
+  status: MovieDetailViewStatus;
+  detail: MovieDetail | null;
+  error: Error | null;
+  isFetching: boolean;
+  refetch: () => void;
+}
+
+const FIVE_MINUTES_MS = 5 * ONE_MINUTE_MS;
+const ONE_DAY_MS = 24 * ONE_HOUR_MS;
+
+export function useMovieDetail(movieId: number): UseMovieDetailResult {
+  const { baseUrl, configError } = safeReadBaseUrl();
+  const validId = Number.isInteger(movieId) && movieId >= 1;
+  const enabled = baseUrl !== null && validId;
+
+  const query = useQuery({
+    queryKey: ['movies', 'detail', baseUrl, movieId],
+    enabled,
+    retry: false,
+    staleTime: FIVE_MINUTES_MS,
+    gcTime: ONE_DAY_MS,
+    queryFn: ({ signal }) => fetchMovieDetail(movieId, signal, baseUrl!),
+  });
+
+  const effectiveError = configError ?? (query.error instanceof Error ? query.error : null);
+  const status = resolveMovieDetailViewStatus({
+    enabled,
+    isPending: query.isPending,
+    isError: query.isError || configError !== null,
+    error: effectiveError,
+    result: query.data,
+  });
+
+  return {
+    status,
+    detail: query.data?.data ?? null,
+    error: effectiveError,
+    isFetching: query.isFetching,
+    refetch: () => {
+      void query.refetch();
+    },
+  };
 }

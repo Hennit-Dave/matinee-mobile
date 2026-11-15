@@ -30,6 +30,7 @@ export const NAV_ITEMS: readonly NavItemSpec[] = [
  */
 export function activeNavItem(pathname: string): NavItemKey | null {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  if (path === '/movie' || path.startsWith('/movie/')) return 'home';
   return NAV_ITEMS.find((item) => item.href === path)?.key ?? null;
 }
 

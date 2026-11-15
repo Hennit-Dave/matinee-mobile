@@ -17,7 +17,9 @@ function TabNavBar({ blurTarget }: Pick<NavBarProps, 'blurTarget'>) {
 
   const onNavigate = (item: NavItemKey) => {
     const spec = NAV_ITEMS.find((candidate) => candidate.key === item);
-    if (spec && spec.key !== active) router.navigate(spec.href as Href);
+    if (spec && (spec.key !== active || pathname !== spec.href)) {
+      router.navigate(spec.href as Href);
+    }
   };
 
   return <NavBar active={active} reduceTransparency={reduceTransparency} onNavigate={onNavigate} blurTarget={blurTarget} />;
@@ -45,7 +47,7 @@ export default function TabsLayout() {
     <View style={styles.fill}>
       <ScreensTarget ref={blurTarget} style={styles.fill}>
         <Tabs tabBar={() => null} screenOptions={{ headerShown: false }}>
-          <Tabs.Screen name="index" options={{ title: 'Home' }} />
+          <Tabs.Screen name="(home)" options={{ title: 'Home' }} />
           <Tabs.Screen name="tickets" options={{ title: 'Tickets' }} />
           <Tabs.Screen name="account" options={{ title: 'Account' }} />
         </Tabs>

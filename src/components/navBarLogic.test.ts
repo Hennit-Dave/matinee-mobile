@@ -29,6 +29,8 @@ test('the active item follows the URL path; Home is "/"', () => {
   assert.equal(activeNavItem('/tickets'), 'tickets');
   assert.equal(activeNavItem('/account'), 'account');
   assert.equal(activeNavItem('/tickets/'), 'tickets', 'a trailing slash is ignored');
+  assert.equal(activeNavItem('/movie/900001'), 'home');
+  assert.equal(activeNavItem('/movie/900001/showtimes'), 'home');
   assert.equal(activeNavItem('/search'), null);
   assert.equal(activeNavItem(''), null);
 });
