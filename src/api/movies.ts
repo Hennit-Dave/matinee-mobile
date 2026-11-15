@@ -5,8 +5,10 @@ import { readApiBaseUrl } from './config';
  * Any contract change lands in a matinee-server PR first.
  */
 export const OVERVIEW_MAX_LENGTH = 200;
+export const DETAIL_OVERVIEW_MAX_LENGTH = 2_000;
 export const MAX_PAGE = 500;
 export const MAX_QUERY_LENGTH = 100;
+export const MAX_MOVIE_ID = 2_147_483_647;
 
 export interface Movie {
   id: number;
@@ -21,6 +23,24 @@ export interface MoviesPage {
   page: number;
   totalPages: number;
   totalResults: number;
+}
+
+export interface MovieDetail {
+  id: number;
+  title: string;
+  overview: string | null;
+  posterUrl: string | null;
+  backdropUrl: string | null;
+  year: number | null;
+  releaseDate: string | null;
+  runtimeMinutes: number | null;
+  genres: string[];
+  rating: number | null;
+  tagline: string | null;
+  certification: string | null;
+  language: string | null;
+  director: string | null;
+  cast: string[];
 }
 
 /**
@@ -56,6 +76,22 @@ export type CacheStatus = 'hit' | 'miss' | 'stale';
 export interface MoviesFetchResult {
   data: MoviesPage;
   cache: CacheStatus | null;
+}
+
+export interface MovieDetailFetchResult {
+  data: MovieDetail;
+  cache: CacheStatus | null;
+}
+
+export function buildMovieDetailUrl(baseUrl: string, id: number): string {
+  if (!Number.isInteger(id) || id < 1 || id > MAX_MOVIE_ID) {
+    throw new MovieApiError('Invalid movie id.', {
+      status: 400,
+      kind: 'validation_failed',
+      retryable: false,
+    });
+  }
+  return `${baseUrl}/movies/${id}`;
 }
 
 export type MovieErrorKind = ApiErrorCode | 'network_error' | 'invalid_response';
@@ -127,7 +163,22 @@ function isMoviesPage(value: unknown): value is MoviesPage {
   );
 }
 
-async function fetchMoviesJson(url: string, signal?: AbortSignal): Promise<MoviesFetchResult> {
+function isMovieDetail(value: unknown): value is MovieDetail {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === 'number' &&
+    typeof record.title === 'string' &&
+    Array.isArray(record.genres) &&
+    Array.isArray(record.cast)
+  );
+}
+
+export async function fetchApiJson<T>(
+  url: string,
+  guard: (value: unknown) => value is T,
+  signal?: AbortSignal
+): Promise<{ data: T; cache: CacheStatus | null }> {
   let res: Response;
   try {
     res = await fetch(url, { signal });
@@ -165,8 +216,8 @@ async function fetchMoviesJson(url: string, signal?: AbortSignal): Promise<Movie
     });
   }
 
-  if (!isMoviesPage(body)) {
-    throw new MovieApiError('Movie response did not match the expected shape.', {
+  if (!guard(body)) {
+    throw new MovieApiError('Response did not match the expected shape.', {
       status: res.status,
       kind: 'invalid_response',
       retryable: false,
@@ -184,7 +235,7 @@ export async function fetchNowPlayingMovies(
   signal?: AbortSignal,
   baseUrl: string = readApiBaseUrl()
 ): Promise<MoviesFetchResult> {
-  return fetchMoviesJson(buildNowPlayingUrl(baseUrl, page), signal);
+  return fetchApiJson(buildNowPlayingUrl(baseUrl, page), isMoviesPage, signal);
 }
 
 export async function fetchSearchMovies(
@@ -201,7 +252,24 @@ export async function fetchSearchMovies(
       retryable: false,
     });
   }
-  return fetchMoviesJson(buildSearchMoviesUrl(baseUrl, normalised, page), signal);
+  return fetchApiJson(buildSearchMoviesUrl(baseUrl, normalised, page), isMoviesPage, signal);
+}
+
+export async function fetchMovieDetail(
+  id: number,
+  signal?: AbortSignal,
+  baseUrl: string = readApiBaseUrl()
+): Promise<MovieDetailFetchResult> {
+  return fetchApiJson(buildMovieDetailUrl(baseUrl, id), isMovieDetail, signal);
+}
+
+export function isServerOverloadedError(error: unknown): boolean {
+  return (
+    error instanceof MovieApiError &&
+    (error.status === 503 ||
+      error.kind === 'upstream_unavailable' ||
+      error.kind === 'service_unavailable')
+  );
 }
 
 export type MoviesViewStatus =
@@ -231,18 +299,48 @@ export function resolveMoviesViewStatus(params: {
   }
 
   if (params.isError) {
-    if (
-      params.error instanceof MovieApiError &&
-      (params.error.status === 503 ||
-        params.error.kind === 'upstream_unavailable' ||
-        params.error.kind === 'service_unavailable')
-    ) {
-      return 'server_overloaded';
-    }
-    return 'error';
+    return isServerOverloadedError(params.error) ? 'server_overloaded' : 'error';
   }
 
   return 'empty';
+}
+
+export type MovieDetailViewStatus =
+  | 'loading'
+  | 'ready'
+  | 'offline_saved_data'
+  | 'server_overloaded'
+  | 'not_found'
+  | 'error';
+
+export function resolveMovieDetailViewStatus(params: {
+  enabled: boolean;
+  isPending: boolean;
+  isError: boolean;
+  error: unknown;
+  result: MovieDetailFetchResult | undefined;
+}): MovieDetailViewStatus {
+  if (!params.enabled) return 'error';
+  if (params.isPending && !params.result) return 'loading';
+
+  if (params.result) {
+    if (params.isError || params.result.cache === 'stale') {
+      return 'offline_saved_data';
+    }
+    return 'ready';
+  }
+
+  if (params.isError) {
+    if (
+      params.error instanceof MovieApiError &&
+      (params.error.status === 404 || params.error.kind === 'not_found')
+    ) {
+      return 'not_found';
+    }
+    return isServerOverloadedError(params.error) ? 'server_overloaded' : 'error';
+  }
+
+  return 'error';
 }
 
 export function formatMovieMeta(movie: Pick<Movie, 'year' | 'overview'>): string {

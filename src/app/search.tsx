@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -161,9 +161,16 @@ export default function Search() {
               title={item.title}
               meta={formatMovieMeta(item)}
               posterUrl={item.posterUrl}
-              onPress={() => {
-                // Movie detail screen lands in a later slice.
-              }}
+              onPress={() =>
+                router.push({
+                  pathname: '/movie/[id]',
+                  params: {
+                    id: String(item.id),
+                    title: item.title,
+                    posterUrl: item.posterUrl ?? '',
+                  },
+                } as unknown as Href)
+              }
             />
           )}
         />

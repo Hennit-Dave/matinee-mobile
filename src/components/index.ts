@@ -1,4 +1,6 @@
+export { BottomSheet, type BottomSheetProps } from './BottomSheet';
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
+export { Chip, type ChipProps } from './Chip';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { Icon, type IconName, type IconProps, type IconSize } from './Icon';
 export { Input, type InputProps } from './Input';

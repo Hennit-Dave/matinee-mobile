@@ -1,10 +1,10 @@
 import { type Href, useRouter } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNowPlayingMovies } from '../../api/useMovies';
-import { Button, EmptyState, Icon, MovieCard, Skeleton, Text, useNavBarClearance } from '../../components';
-import { useTheme } from '../../theme';
-import { primitives } from '../../tokens/tokens';
+import { useNowPlayingMovies } from '../../../api/useMovies';
+import { Button, EmptyState, Icon, MovieCard, Skeleton, Text, useNavBarClearance } from '../../../components';
+import { useTheme } from '../../../theme';
+import { primitives } from '../../../tokens/tokens';
 
 const SKELETON_ITEMS = [0, 1, 2, 3, 4, 5];
 
@@ -123,9 +123,16 @@ export default function Home() {
               title={item.title}
               meta={item.year ? String(item.year) : undefined}
               posterUrl={item.posterUrl}
-              onPress={() => {
-                // Movie detail screen lands in a later slice.
-              }}
+              onPress={() =>
+                router.push({
+                  pathname: '/movie/[id]',
+                  params: {
+                    id: String(item.id),
+                    title: item.title,
+                    posterUrl: item.posterUrl ?? '',
+                  },
+                } as unknown as Href)
+              }
             />
           )}
         />
