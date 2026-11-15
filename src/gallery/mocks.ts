@@ -13,3 +13,16 @@ export const MOCK_META = {
 
 export const MOCK_SHOWTIMES = ['19:30', '20:15', '21:00', '21:45'] as const;
 export const MOCK_DATES = ['Fri 14', 'Sat 15', 'Sun 16'] as const;
+
+export const MOCK_CINEMA = {
+  name: 'Orpheum Central',
+  showing: 'Screen 3, Saturday 14 November, 19:30',
+  ticketNote: 'Seats F7, F8',
+} as const;
+
+export const MOCK_TOASTS = {
+  info: 'Seats held for 10 minutes.',
+  success: 'Booking confirmed.',
+  error: 'Payment failed.',
+  long: 'We could not reach the server, so your seats were not held. Check your connection and try again.',
+} as const;

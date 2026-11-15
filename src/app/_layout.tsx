@@ -6,6 +6,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ToastProvider } from '../components';
 import { useTheme } from '../theme';
 
 void SplashScreen.preventAutoHideAsync();
@@ -45,7 +46,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <RootContent />
+        <ToastProvider>
+          <RootContent />
+        </ToastProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );

@@ -31,12 +31,22 @@ export const GALLERY_SECTIONS: readonly GallerySectionSpec[] = [
   {
     id: 'cards',
     title: 'Cards and posters',
-    components: ['MovieCard', 'SearchResultRow', 'HeroBackdrop'],
+    components: ['Card', 'MovieCard', 'SearchResultRow', 'HeroBackdrop'],
     docs: '3. Cards and posters',
   },
-  { id: 'selection', title: 'Selection and labels', components: ['Chip'], docs: '4. Selection and labels' },
+  {
+    id: 'selection',
+    title: 'Selection and labels',
+    components: ['Chip', 'Badge'],
+    docs: '4. Selection and labels',
+  },
   { id: 'input', title: 'Input', components: ['Input'], docs: '5. Input' },
-  { id: 'feedback', title: 'Feedback', components: ['Skeleton', 'EmptyState'], docs: '6. Feedback' },
+  {
+    id: 'feedback',
+    title: 'Feedback',
+    components: ['Toast', 'ToastProvider', 'Skeleton', 'EmptyState'],
+    docs: '6. Feedback',
+  },
   {
     id: 'navigation',
     title: 'Navigation and sheets',
@@ -58,12 +68,9 @@ export interface PlannedComponent {
  * add it to a section above (the test checks both lists stay honest).
  */
 export const PLANNED_COMPONENTS: readonly PlannedComponent[] = [
-  { name: 'Card', docs: '3. Cards and posters' },
   { name: 'QRCode', docs: '3. Cards and posters' },
-  { name: 'Badge', docs: '4. Selection and labels' },
   { name: 'Switch', docs: '4. Selection and labels' },
   { name: 'ListRow', docs: '4. Selection and labels' },
-  { name: 'Toast', docs: '6. Feedback' },
   { name: 'Countdown', docs: '6. Feedback' },
   { name: 'Seat', docs: '8. Seats' },
   { name: 'SeatMap', docs: '8. Seats' },

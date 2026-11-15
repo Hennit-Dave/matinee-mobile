@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { EmptyState, Skeleton, Text } from '../../components';
+import { Button, EmptyState, Skeleton, Text, Toast, useToast } from '../../components';
 import { useTheme } from '../../theme';
 import { primitives } from '../../tokens/tokens';
 import { GalleryGroup, GalleryItem, GalleryPanel, GalleryRow } from '../GalleryParts';
+import { MOCK_TOASTS } from '../mocks';
 
 /** EmptyState fills its parent (flex: 1), so each demo frame needs a definite height. */
 const FRAME_HEIGHT = primitives['space/16'] * 5;
@@ -12,9 +13,68 @@ const FRAME_HEIGHT_TALL = primitives['space/16'] * 6;
 export function FeedbackSection() {
   const { colors } = useTheme();
   const [lastAction, setLastAction] = useState('none yet');
+  const [toastAction, setToastAction] = useState('none yet');
+  const toast = useToast();
 
   return (
     <>
+      <GalleryGroup
+        name="Toast"
+        note="A short message above the content, never covering the main button. 3 tones, each with its own icon shape (the tone is not colour alone). The action is optional. A toast dismisses itself: 4 s for a plain message, 6 s for an error or one with an action."
+      >
+        <GalleryItem label="info, success, error">
+          <View style={styles.stack}>
+            <Toast tone="info" message={MOCK_TOASTS.info} />
+            <Toast tone="success" message={MOCK_TOASTS.success} />
+            <Toast tone="error" message={MOCK_TOASTS.error} />
+          </View>
+        </GalleryItem>
+        <GalleryItem label="with an action">
+          <View style={styles.stack}>
+            <Toast tone="info" message={MOCK_TOASTS.info} action={{ label: 'Undo', onPress: () => {} }} />
+            <Toast tone="error" message={MOCK_TOASTS.error} action={{ label: 'Retry', onPress: () => {} }} />
+          </View>
+        </GalleryItem>
+        <GalleryItem label="a long message wraps">
+          <Toast tone="error" message={MOCK_TOASTS.long} action={{ label: 'Retry', onPress: () => {} }} />
+        </GalleryItem>
+
+        <GalleryItem label="live, through ToastProvider and useToast (auto-dismiss; a new toast replaces the old one)">
+          <View style={styles.liveButtons}>
+            <Button
+              variant="secondary"
+              label="Show info"
+              onPress={() => toast.show({ tone: 'info', message: MOCK_TOASTS.info })}
+            />
+            <Button
+              variant="secondary"
+              label="Show success"
+              onPress={() => toast.show({ tone: 'success', message: MOCK_TOASTS.success })}
+            />
+            <Button
+              variant="secondary"
+              label="Show error"
+              onPress={() => toast.show({ tone: 'error', message: MOCK_TOASTS.error })}
+            />
+            <Button
+              variant="secondary"
+              label="Show with action"
+              onPress={() =>
+                toast.show({
+                  tone: 'error',
+                  message: MOCK_TOASTS.error,
+                  action: { label: 'Retry', onPress: () => setToastAction('Retry') },
+                })
+              }
+            />
+            <Button variant="text" label="Dismiss" onPress={toast.dismiss} />
+          </View>
+          <Text variant="caption" color="text/secondary" accessibilityLiveRegion="polite">
+            {`Last toast action: ${toastAction}`}
+          </Text>
+        </GalleryItem>
+      </GalleryGroup>
+
       <GalleryGroup
         name="Skeleton"
         note="4 shapes. Pulses between skeleton/base and skeleton/highlight with Reanimated; holds the base colour when the OS reduce-motion setting is on. Used instead of spinners."
@@ -87,6 +147,14 @@ export function FeedbackSection() {
 }
 
 const styles = StyleSheet.create({
+  stack: {
+    gap: primitives['space/3'],
+  },
+  liveButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: primitives['space/3'],
+  },
   frame: {
     borderWidth: primitives['border-width/default'],
     borderRadius: primitives['radius/lg'],
