@@ -266,6 +266,17 @@ Rules that apply to every component:
 - **System layout:** the same component with an `Icon` above it (Info in `status/info`, or Error in `status/error` for server errors). Used for No internet, Server error, Maintenance, Update required, Session expired and the Notification primer.
 - **Rules:** exactly one action in the component. A second, quieter action ("Open saved tickets", "Not now") is a `Button` text variant placed below it.
 
+### CrossfadeStack
+- **Figma:** none. It is behaviour, not a visual: it swaps the slides of the Home featured hero (frame `40:1339`). **Code:** `CrossfadeStack`.
+- **Props:** `incoming: { key: string; node: ReactNode }`, `outgoing?: { key: string; node: ReactNode } | null`, `reducedMotion?: boolean`.
+- **Tokens:** `duration/slow` (350 ms) for the fade. It has no colour, spacing or type of its own.
+- **Motion:** the incoming slide fades in with Reanimated (`FadeIn`) on top of the outgoing slide, which stays fully opaque underneath until it is removed, so the content never dips to the page colour mid-fade. With `reducedMotion` on, the swap is instant.
+- **Rules:**
+  - The outgoing layer ignores touches and is hidden from screen readers, so only the visible slide can be focused or tapped.
+  - Give a slide the same `key` in both roles. It then stays mounted when it moves from incoming to outgoing, so its image does not reload.
+  - The caller removes `outgoing` once the fade has finished (Home does this in `useHeroCycle`).
+- **Built (home-dynamic slice).** Code: `src/components/CrossfadeStack.tsx`.
+
 ---
 
 ## 7. Navigation and sheets

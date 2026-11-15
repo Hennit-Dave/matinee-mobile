@@ -130,6 +130,12 @@ export function buildNowPlayingUrl(baseUrl: string, page = 1): string {
   return `${baseUrl}/movies/now-playing?page=${safePage}`;
 }
 
+/** Mirrors server PopularQuerySchema: page 1..500. */
+export function buildPopularMoviesUrl(baseUrl: string, page = 1): string {
+  const safePage = Math.max(1, Math.min(MAX_PAGE, Math.trunc(page)));
+  return `${baseUrl}/movies/popular?page=${safePage}`;
+}
+
 export function buildSearchMoviesUrl(baseUrl: string, query: string, page = 1): string {
   const normalised = normaliseSearchQuery(query).slice(0, MAX_QUERY_LENGTH);
   const safePage = Math.max(1, Math.min(MAX_PAGE, Math.trunc(page)));
@@ -236,6 +242,14 @@ export async function fetchNowPlayingMovies(
   baseUrl: string = readApiBaseUrl()
 ): Promise<MoviesFetchResult> {
   return fetchApiJson(buildNowPlayingUrl(baseUrl, page), isMoviesPage, signal);
+}
+
+export async function fetchPopularMovies(
+  page = 1,
+  signal?: AbortSignal,
+  baseUrl: string = readApiBaseUrl()
+): Promise<MoviesFetchResult> {
+  return fetchApiJson(buildPopularMoviesUrl(baseUrl, page), isMoviesPage, signal);
 }
 
 export async function fetchSearchMovies(

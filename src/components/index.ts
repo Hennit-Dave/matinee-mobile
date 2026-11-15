@@ -1,6 +1,7 @@
 export { BottomSheet, type BottomSheetProps } from './BottomSheet';
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { Chip, type ChipProps } from './Chip';
+export { CrossfadeStack, type CrossfadeLayer, type CrossfadeStackProps } from './CrossfadeStack';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { HeroBackdrop, type HeroBackdropProps, svgStopProps } from './HeroBackdrop';
 export { Icon, type IconName, type IconProps, type IconSize } from './Icon';
