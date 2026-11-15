@@ -7,6 +7,7 @@ export { Input, type InputProps } from './Input';
 export { NavBar, type NavBarProps } from './NavBar';
 export { NAV_ITEMS, type NavItemKey } from './navBarLogic';
 export { MovieCard, type MovieCardLayout, type MovieCardProps } from './MovieCard';
+export { SearchResultRow, type SearchResultRowProps } from './SearchResultRow';
 export { Skeleton, type SkeletonProps, type SkeletonShape } from './Skeleton';
 export { Text, type TextProps, type TextVariant } from './Text';
 export { useNavBarClearance } from './useNavBarClearance';
