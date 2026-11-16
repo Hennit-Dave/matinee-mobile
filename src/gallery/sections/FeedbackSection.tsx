@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, EmptyState, Skeleton, Text, Toast, useToast } from '../../components';
+import { Button, Countdown, EmptyState, Skeleton, Text, Toast, useToast } from '../../components';
 import { useTheme } from '../../theme';
 import { primitives } from '../../tokens/tokens';
 import { GalleryGroup, GalleryItem, GalleryPanel, GalleryRow } from '../GalleryParts';
@@ -18,6 +18,24 @@ export function FeedbackSection() {
 
   return (
     <>
+      <GalleryGroup
+        name="Countdown"
+        note="The seat-hold countdown, drawn from the seconds it is given: it never counts down by itself (the live hold belongs to the traffic slice). Calm until 2:00; urgent for the last two minutes, the only place orange appears. Tabular figures keep the pill still as digits change."
+      >
+        <GalleryItem label="calm: 9:58, and 2:00 exactly (still calm)">
+          <GalleryRow>
+            <Countdown secondsRemaining={598} />
+            <Countdown secondsRemaining={120} />
+          </GalleryRow>
+        </GalleryItem>
+        <GalleryItem label="urgent: 1:59, and 0:09">
+          <GalleryRow>
+            <Countdown secondsRemaining={119} />
+            <Countdown secondsRemaining={9} />
+          </GalleryRow>
+        </GalleryItem>
+      </GalleryGroup>
+
       <GalleryGroup
         name="Toast"
         note="A short message above the content, never covering the main button. 3 tones, each with its own icon shape (the tone is not colour alone). The action is optional. A toast dismisses itself: 4 s for a plain message, 6 s for an error or one with an action."

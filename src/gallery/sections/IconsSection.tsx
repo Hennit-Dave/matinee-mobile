@@ -11,6 +11,8 @@ const ICON_NAMES: readonly IconName[] = [
   'success',
   'chevron-left',
   'chevron-right',
+  'plus',
+  'minus',
   'home',
   'ticket',
   'user',
@@ -32,7 +34,7 @@ export function IconsSection() {
   return (
     <GalleryGroup
       name="Icon"
-      note="10 icons, 3 sizes (sm 16, md 20, lg 24), coloured by semantic token. Pass accessibilityLabel when an icon stands alone."
+      note="12 icons, 3 sizes (sm 16, md 20, lg 24), coloured by semantic token. Pass accessibilityLabel when an icon stands alone."
     >
       <GalleryItem label="All icons at sm, md and lg">
         <View style={styles.grid}>
