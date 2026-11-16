@@ -1,5 +1,7 @@
+import { clientIdHeaders } from './clientId';
 import { readApiBaseUrl } from './config';
 import { MovieApiError, fetchApiJson, isServerOverloadedError, type CacheStatus } from './movies';
+import { POLL_FAILURES_BEFORE_ERROR } from './seatsPolling';
 
 /**
  * Mirrors matinee-server/src/showtimes/seat.ts (`GET /showtimes/:id/seats`, ADR 0014).
@@ -11,8 +13,10 @@ import { MovieApiError, fetchApiJson, isServerOverloadedError, type CacheStatus 
 export type SeatKind = 'standard' | 'wheelchair';
 
 /**
- * Per-showtime availability. The server only emits `available` until bookings and holds exist (traffic
- * slice), but all three are in the contract already. "Yours" (selected) is client-only and never here.
+ * Per-showtime availability, all three live since traffic slice 5a (ADR 0015): `sold` comes from bookings,
+ * `held` from Redis (so it is real-time, never cached), and sold wins when a seat is both. "Yours" (selected) is
+ * client-only and never here. The server does not say WHO holds a `held` seat: the caller's own held seats come
+ * back as `held` like anyone else's, so the screen draws its own (see `withOwnHold` in seatMapLogic.ts).
  */
 export type SeatStatus = 'available' | 'held' | 'sold';
 
@@ -122,12 +126,22 @@ export function isShowtimeSeatsResponse(value: unknown): value is ShowtimeSeatsR
   );
 }
 
+/**
+ * `clientId` is optional on this route. Sent, it lets the server show a user their own booking at once even if
+ * the read replica has not heard of it yet (read-your-own-writes, ADR 0015). Omitted, the map is the same map.
+ */
 export async function fetchShowtimeSeats(
   showtimeId: string,
   signal?: AbortSignal,
-  baseUrl: string = readApiBaseUrl()
+  baseUrl: string = readApiBaseUrl(),
+  clientId?: string
 ): Promise<SeatsFetchResult> {
-  return fetchApiJson(buildShowtimeSeatsUrl(baseUrl, showtimeId), isShowtimeSeatsResponse, signal);
+  return fetchApiJson(
+    buildShowtimeSeatsUrl(baseUrl, showtimeId),
+    isShowtimeSeatsResponse,
+    signal,
+    clientId ? { headers: clientIdHeaders(clientId) } : undefined
+  );
 }
 
 export function countSeats(rows: readonly ShowtimeSeatRow[]): number {
@@ -155,14 +169,50 @@ export const NO_SEATS_MESSAGE = 'No seats came back for this showing.';
 
 export type SeatsViewStatus = 'loading' | 'ready' | 'sold_out' | 'server_overloaded' | 'not_found' | 'error';
 
+/** A refresh failed, but the map from the last good one is still on screen. Used by the screen to say so. */
+export function isStaleRefresh(params: {
+  isError: boolean;
+  error: unknown;
+  result: SeatsFetchResult | undefined;
+  consecutiveFailures?: number;
+}): boolean {
+  return (
+    params.isError &&
+    params.result !== undefined &&
+    params.consecutiveFailures !== undefined &&
+    params.consecutiveFailures < POLL_FAILURES_BEFORE_ERROR &&
+    !isShowingGone(params.error)
+  );
+}
+
+function isShowingGone(error: unknown): boolean {
+  return error instanceof MovieApiError && (error.status === 404 || error.kind === 'not_found');
+}
+
 /**
  * Decides which screen state to draw. Two rules matter most:
  *
  * 1. An empty `rows` array is an ERROR (retryable), never "sold out". The server returns `rows: []`
  *    only when something is wrong (for example the seats were never seeded). A genuinely sold-out
  *    room arrives as a full grid with every seat `sold`.
- * 2. A failed (re)fetch is an error even if an earlier response is still cached. Stale seat availability
- *    is never presented as live, so there is no "showing saved data" state here.
+ *
+ * 2. Stale seat availability is never presented as live. This rule has two parts, and the second REFINES the
+ *    first version of it (seat-map slice), on purpose, because the map now refreshes itself every ~5 s:
+ *
+ *    - A failed refresh is an error when there is nothing to show, and when `consecutiveFailures` is not passed
+ *      (a one-off fetch): the old rule, unchanged.
+ *    - While the map polls, ONE or TWO failed refreshes in a row keep the last good map on screen (the caller
+ *      gets `stale` from `isStaleRefresh` and says so with a Toast), and the THIRD in a row (see
+ *      `POLL_FAILURES_BEFORE_ERROR`) is an error, as before.
+ *
+ *    Why: the old rule was written for a screen that fetched once. With polling, one dropped packet on a phone in
+ *    a lift would wipe a half-made seat choice and replace the room with an error. The reason for the rule
+ *    (never let someone believe a seat is free when it may not be) still holds under the refinement, because
+ *    nothing is lost by keeping the map: Continue is safe on any map (the server decides every hold and
+ *    refuses a taken seat), the failure is announced, and a third failure stops the pretence. A showing that
+ *    has gone (404) is never tolerated.
+ *
+ * Everything else about the order of checks is unchanged.
  */
 export function resolveSeatsViewStatus(params: {
   enabled: boolean;
@@ -170,13 +220,13 @@ export function resolveSeatsViewStatus(params: {
   isError: boolean;
   error: unknown;
   result: SeatsFetchResult | undefined;
+  /** Refreshes that failed in a row since the last good one. Leave out for a one-off fetch (no tolerance). */
+  consecutiveFailures?: number;
 }): SeatsViewStatus {
   if (!params.enabled) return 'error';
 
-  if (params.isError) {
-    if (params.error instanceof MovieApiError && (params.error.status === 404 || params.error.kind === 'not_found')) {
-      return 'not_found';
-    }
+  if (params.isError && !isStaleRefresh(params)) {
+    if (isShowingGone(params.error)) return 'not_found';
     return isServerOverloadedError(params.error) ? 'server_overloaded' : 'error';
   }
 
