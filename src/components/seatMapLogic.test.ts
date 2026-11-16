@@ -37,6 +37,7 @@ import {
   seatName,
   seatVisualState,
   selectedSeatNames,
+  selectionHaptic,
   stepStop,
   summarySeatsLine,
   toggleSeatSelection,
@@ -314,6 +315,15 @@ test('the limit refuses a ninth seat, says so, and still lets you drop one', () 
   assert.notEqual(refused.next, full, 'a copy, never the same array');
   assert.deepEqual(toggleSeatSelection(full, 'A-1').next.length, 7);
   assert.equal(toggleSeatSelection(full, 'B-1', 9).limitReached, false, 'the limit is a parameter');
+});
+
+test('haptics: a pick and a drop earn the selection tick, and only the cap earns the warning', () => {
+  const picked = toggleSeatSelection([], 'D-8');
+  assert.equal(selectionHaptic(picked), 'selection');
+  assert.equal(selectionHaptic(toggleSeatSelection(picked.next, 'D-8')), 'selection', 'dropping a seat ticks too');
+  const full = Array.from({ length: MAX_SEATS_PER_BOOKING }, (_, i) => `A-${i + 1}`);
+  assert.equal(selectionHaptic(toggleSeatSelection(full, 'B-1')), 'warning', 'the ninth seat is refused with a warning');
+  assert.equal(selectionHaptic(toggleSeatSelection(full, 'A-1')), 'selection', 'dropping from a full selection is a normal drop');
 });
 
 test('picks that are no longer available are dropped, in order', () => {

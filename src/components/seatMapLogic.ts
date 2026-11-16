@@ -190,6 +190,17 @@ export function toggleSeatSelection(
   return { next: [...selected, seatId], limitReached: false };
 }
 
+export type SelectionHaptic = 'selection' | 'warning';
+
+/**
+ * Which haptic a tap on a seat earns: a light selection tick for a pick or a drop, and a warning when
+ * the seat cap refuses a pick. A tap that changes nothing (a sold seat, the Overview zooming) never
+ * reaches here, so it earns none.
+ */
+export function selectionHaptic(change: SelectionChange): SelectionHaptic {
+  return change.limitReached ? 'warning' : 'selection';
+}
+
 /** Drops picks that are no longer available (for example after a refresh), keeping the order. */
 export function pruneUnavailable(selected: readonly string[], rows: readonly ShowtimeSeatRow[]): string[] {
   const available = new Set<string>();

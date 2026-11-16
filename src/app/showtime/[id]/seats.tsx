@@ -10,9 +10,11 @@ import {
   composeSeatingSubtitle,
   pruneUnavailable,
   selectedSeatNames,
+  selectionHaptic,
   summarySeatsLine,
   toggleSeatSelection,
 } from '../../../components/seatMapLogic';
+import * as haptics from '../../../lib/haptics';
 import { useTheme } from '../../../theme';
 import { primitives } from '../../../tokens/tokens';
 
@@ -49,6 +51,10 @@ export default function SeatSelectionScreen() {
   const onSelectSeat = useCallback(
     (seatId: string) => {
       const change = toggleSeatSelection(selectedIds, seatId);
+      // One deliberate haptic per tap that reaches here: a tick for a pick or a drop, a warning when the cap
+      // refuses. Nothing on pan, pinch, zoom or scroll, and none on Continue, which is inert.
+      if (selectionHaptic(change) === 'warning') haptics.warning();
+      else haptics.selection();
       if (change.limitReached) {
         toast.show({
           message: `You can pick up to ${MAX_SEATS_PER_BOOKING} seats.`,
