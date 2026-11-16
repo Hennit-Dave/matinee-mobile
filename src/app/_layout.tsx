@@ -5,6 +5,8 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '../components';
 import { useTheme } from '../theme';
@@ -34,6 +36,8 @@ function RootContent() {
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors['surface/default'] } }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="search" />
+      {/* Seat selection is a root-level route, outside (tabs), so the glass NavBar is not drawn on it. */}
+      <Stack.Screen name="showtime/[id]/seats" />
       {/* Development-only check screen: not reachable from the tab bar. */}
       <Stack.Screen name="dev-health" />
       {/* Hidden component gallery (RULES.md D3.4): unlinked, open it by its path, /gallery. */}
@@ -43,13 +47,22 @@ function RootContent() {
 }
 
 export default function RootLayout() {
+  // GestureHandlerRootView: the seat map's pinch, pan and tap (react-native-gesture-handler) need it at the root.
   return (
-    <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <ToastProvider>
-          <RootContent />
-        </ToastProvider>
-      </QueryClientProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
+          <ToastProvider>
+            <RootContent />
+          </ToastProvider>
+        </QueryClientProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+});
