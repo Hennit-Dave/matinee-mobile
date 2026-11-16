@@ -53,7 +53,10 @@ export type ApiErrorCode =
   | 'payload_too_large'
   | 'internal_error'
   | 'service_unavailable'
-  | 'upstream_unavailable';
+  | 'upstream_unavailable'
+  | 'seat_taken'
+  | 'seat_not_held'
+  | 'holds_unavailable';
 
 export interface ApiErrorDetail {
   path: string;
@@ -68,6 +71,8 @@ export interface ApiErrorBody {
     message: string;
     requestId: string;
     details?: ApiErrorDetail[];
+    /** Only on `seat_taken` and `seat_not_held`: which seats the refusal is about (ADR 0015). */
+    seatIds?: string[];
   };
 }
 
@@ -115,16 +120,29 @@ export class MovieApiError extends Error {
   readonly kind: MovieErrorKind;
   readonly requestId?: string;
   readonly retryable: boolean;
+  /** The seats a `seat_taken` / `seat_not_held` refusal names. Absent otherwise. */
+  readonly seatIds?: string[];
+  /** The server's `Retry-After`, in whole seconds, when it sent one. */
+  readonly retryAfterSeconds?: number;
 
   constructor(
     message: string,
-    options: { status: number; kind: MovieErrorKind; requestId?: string; retryable?: boolean }
+    options: {
+      status: number;
+      kind: MovieErrorKind;
+      requestId?: string;
+      retryable?: boolean;
+      seatIds?: string[];
+      retryAfterSeconds?: number;
+    }
   ) {
     super(message);
     this.name = 'MovieApiError';
     this.status = options.status;
     this.kind = options.kind;
     this.requestId = options.requestId;
+    this.seatIds = options.seatIds;
+    this.retryAfterSeconds = options.retryAfterSeconds;
     this.retryable =
       options.retryable ??
       (options.status === 503 ||
@@ -180,6 +198,20 @@ function parseCacheHeader(header: string | null): CacheStatus | null {
   return null;
 }
 
+/** The longest `Retry-After` the app will honour. A header is input from the network, so it is bounded. */
+export const MAX_RETRY_AFTER_SECONDS = 60;
+
+/** `Retry-After` in whole seconds. The HTTP-date form is not used by this server, so it is ignored. */
+export function parseRetryAfter(header: string | null): number | undefined {
+  if (!header || !/^\d{1,6}$/.test(header.trim())) return undefined;
+  return Math.min(Number(header.trim()), MAX_RETRY_AFTER_SECONDS);
+}
+
+/** Only an array of strings counts; anything else is dropped rather than guessed at. */
+function readSeatIds(value: unknown): string[] | undefined {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string') ? (value as string[]) : undefined;
+}
+
 function isApiErrorBody(value: unknown): value is ApiErrorBody {
   if (typeof value !== 'object' || value === null) return false;
   const err = (value as { error?: unknown }).error;
@@ -222,14 +254,34 @@ function isGenresResponse(value: unknown): value is GenresResponse {
   return Array.isArray(record.genres) && record.genres.every(isGenre);
 }
 
+/**
+ * What a call needs beyond a plain GET: the seat-hold routes are POST and DELETE with a JSON body, and every
+ * one carries `X-Client-Id`. Omitted, the call is the GET it always was.
+ */
+export interface ApiRequestOptions {
+  method?: 'GET' | 'POST' | 'DELETE';
+  headers?: Record<string, string>;
+  /** Sent as JSON. */
+  body?: unknown;
+}
+
 export async function fetchApiJson<T>(
   url: string,
   guard: (value: unknown) => value is T,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  request: ApiRequestOptions = {}
 ): Promise<{ data: T; cache: CacheStatus | null }> {
+  const hasBody = request.body !== undefined;
+  const init: RequestInit = { signal };
+  if (request.method) init.method = request.method;
+  if (request.headers || hasBody) {
+    init.headers = { ...(hasBody ? { 'Content-Type': 'application/json' } : {}), ...request.headers };
+  }
+  if (hasBody) init.body = JSON.stringify(request.body);
+
   let res: Response;
   try {
-    res = await fetch(url, { signal });
+    res = await fetch(url, init);
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') throw err;
     throw new MovieApiError('Could not reach the Matinee server.', {
@@ -256,6 +308,8 @@ export async function fetchApiJson<T>(
         status: res.status,
         kind: body.error.code,
         requestId: body.error.requestId,
+        seatIds: readSeatIds(body.error.seatIds),
+        retryAfterSeconds: parseRetryAfter(res.headers.get('Retry-After')),
       });
     }
     throw new MovieApiError('Movie request failed.', {
