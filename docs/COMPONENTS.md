@@ -376,7 +376,7 @@ Rules that apply to every component:
 - Size `size/seat` (36), gap `size/seat-gap` (8), `border-width/strong`, radius `radius/sm` (circle uses `radius/full`).
 - **Hit slop:** the zoomed seat is 36 with an 8 gap, so use `hitSlop` of 6 on each side to reach 48. Neighbouring slop areas overlap by 4, so the nearest seat centre wins. Test on a real device.
 - Announce row, number and state to screen readers ("Row D, seat 8, available").
-- **Built (seat-selection slice).** Code: `src/components/Seat.tsx` (the look of each state, drawn from the Figma `SeatMap/Seat` artwork: tick, cross, 6-line hatch and wheelchair glyph in the seat's own 36 × 36 space, so they scale with it). Props: `state`, `size` (default 36; the legend draws 24), and, only for the map, `seatId`, `accessibilityLabel` and `onActivate` (a screen-reader activation). It is `React.memo` with primitive props only. **It is exported** (the legend and the gallery use it) although the spec called it internal. The tick pops in with Reanimated when a seat is picked (not with reduced motion). **No haptic yet:** `expo-haptics` is not installed and was not in the approved plan.
+- **Built (seat-selection slice).** Code: `src/components/Seat.tsx` (the look of each state, drawn from the Figma `SeatMap/Seat` artwork: tick, cross, 6-line hatch and wheelchair glyph in the seat's own 36 × 36 space, so they scale with it). Props: `state`, `size` (default 36; the legend draws 24), and, only for the map, `seatId`, `accessibilityLabel` and `onActivate` (a screen-reader activation). It is `React.memo` with primitive props only. **It is exported** (the legend and the gallery use it) although the spec called it internal. The tick pops in with Reanimated when a seat is picked (not with reduced motion). **Haptics** are not the `Seat`'s job: the seat screen fires them (see SeatMap below) through the shared helper `src/lib/haptics.ts`.
 - **Hit slop:** not per-seat `hitSlop`. The map hit-tests the whole tap in one place (nearest seat centre within half a seat pitch), which implements the same rule with one handler instead of 320 touchables (ADR 0014).
 
 ### SeatMap / Legend
@@ -411,6 +411,7 @@ Rules that apply to every component:
     - The whole map is one scaled layer, so at the 0.3× 300+ Overview the gaps and the aisle scale with the seats (about 2.4 and 12) where Figma keeps them at 4 and 20. The 0.5× Overview is exact (18 seats, 4 gaps, 20 aisle, 328 wide for a 14-seat row).
     - The "Screen" bar is the flat pill Figma draws (its layer is named "arc"), not a curve.
     - The aisle is drawn after seat `ceil(n / 2)`; it is not in the data.
+  - **Haptics (seat screen only, for now):** a light selection tick on every pick **and** drop, and a warning when the 8-seat cap refuses a pick (the existing Toast still shows). Nothing on pan, pinch, zoom, scroll or render, none on a tap that changes nothing (a sold seat, the Overview zooming), and none on Continue, which is inert. The rule is `selectionHaptic` in `seatMapLogic.ts`. The calls go through `src/lib/haptics.ts` (see below), and the gallery's demo maps do not buzz.
   - **Accessibility:** zoomed, every seat is its own element ("Row D, seat 8, held by someone else") with an activate action; the Overview is one element ("Seat map, 320 of 320 seats available. Double tap to zoom in.") with a zoom action, so a screen-reader user is never stranded behind a pinch. Not yet checked with TalkBack or VoiceOver.
 
 ---
@@ -469,6 +470,16 @@ Rules that apply to every component:
 - Status bar in the frames is a placeholder.
 - Placeholder poster colours (`poster/*`) are design-only.
 - Gallery frames are documentation, not screens.
+- **Haptics helper (`src/lib/haptics.ts`).** The one place the app produces haptic feedback, for any screen to reuse. Import it and call a wrapper; never call `expo-haptics` directly:
+
+  ```ts
+  import * as haptics from '../lib/haptics';
+  haptics.selection();   // a light tick: a selection changed (a seat picked or dropped)
+  haptics.impactLight(); // a light tap: a small control pressed
+  haptics.warning();     // a refused action (the seat cap)
+  ```
+
+  Every call is fire-and-forget (it returns nothing, never a promise) and safe: it does nothing on the web or where the native module is missing, and it swallows any thrown error or rejected promise, so it cannot crash a render, a handler or a test. The safety logic is in `hapticsCore.ts` and unit-tested without React Native. Use it for deliberate moments only, never on scroll, pan, pinch or render. `expo-haptics` is at Expo SDK 58's version and ships in Expo Go, so it needs no new native build. Today only the seat screen calls it.
 
 ---
 

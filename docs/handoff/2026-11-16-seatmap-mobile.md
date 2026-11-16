@@ -26,12 +26,17 @@ Mobile PR of two. It mirrors the contract from matinee-server PR #21 (merged: `G
 - **"Pick your seats"** ([seats.tsx](../../src/app/showtime/[id]/seats.tsx)): a root-level route, so the NavBar (which lives in the tabs layout) is not drawn. States: loading, ready, sold out, not found, server overloaded, error. Footer: "2 seats · D8, D9" over **the server's `£18.50 each`** (no money maths or formatting in the app); Continue is disabled until a seat is picked and then shows the honest Toast, with a "Preview only: seats aren't held or booked yet." note. A cap of 8 seats is a UI guard only.
 - **Routing:** the showtime chip now pushes `/showtime/[id]/seats` with the slot id and the movie title (display only). `GestureHandlerRootView` added at the root (RNGH v3 throws in dev without it).
 - **Gallery:** `Seat`, `SeatLegend`, `SeatMap` in a new Seats section and `Countdown` under Feedback, all out of `PLANNED_COMPONENTS` (still planned: QRCode, Switch, ListRow). `registry.test` enforces it.
-- **Docs:** `COMPONENTS.md` "Built" notes and deviations; evidence under `docs/evidence/seatmap/`.
+- **Haptics** (added to this branch after the first push):
+  - `expo-haptics` installed with `npx expo install expo-haptics`, which picked `~58.0.8`, Expo SDK 58's own pin (not hand-chosen). `expo install --check` reports everything up to date. **It ships in Expo Go**: Expo Go 58.0.5's `classes3.dex` contains `expo/modules/haptics/HapticsModule`, so there is no new EAS build.
+  - **`src/lib/haptics.ts`** is the one shared place for haptic calls, for other screens to reuse: `selection()`, `impactLight()`, `warning()`. Each is fire-and-forget (returns nothing, never a promise) and safe: a no-op on the web and where the native module is missing, and it swallows any throw or rejection (`expo-haptics` reports a missing module as a rejected promise). The safety logic is in `hapticsCore.ts`, unit-tested without React Native (8 tests, including "no unhandled rejection").
+  - **Wired on the seat screen only:** a `selection()` tick on every pick **and** drop, and a `warning()` at the 8-seat cap (alongside the existing Toast). The rule is `selectionHaptic` in `seatMapLogic.ts`, tested. Nothing on scroll, pan, pinch, zoom or render, none on a tap that changes nothing, and none on the inert Continue. The gallery demo maps do not buzz.
+  - **Measured on the device** from Android's vibration log: 0 on mount, zoom, pan, pinch, Plus, Minus, a gutter tap and Continue; 1 tick per pick and per drop (8 picks gave 8); and the ninth seat gave 1 distinct, longer warning (223 ms against 52 ms). Record: `docs/evidence/seatmap/haptics.txt`.
+- **Docs:** `COMPONENTS.md` "Built" notes, deviations and the haptics helper; evidence under `docs/evidence/seatmap/`.
 
 ## What passed
 
 - `npm run typecheck`, `npm run lint`: clean.
-- `npm test`: **173 passed, 0 failed** (59 new on top of the existing 114: 16 for the seats contract and view status, 39 for the map logic, 4 for the Countdown).
+- `npm test`: **182 passed, 0 failed** (68 new on top of the existing 114: 16 for the seats contract and view status, 40 for the map logic, 4 for the Countdown, 8 for the haptics helper).
 - On the Android emulator against the real server (PR #21, throwaway local Postgres, 320-seat IMAX room): header, 320-seat room, legend, footer price, pick and drop, the 8-seat limit and Toast, Continue Toast, tap-to-zoom, Plus and Minus (Plus greys out at the limit), pan, two-finger pinch, dark mode, every state in the table above.
 - `gitleaks detect`: 29 commits scanned, no leaks.
 
@@ -42,13 +47,13 @@ Mobile PR of two. It mirrors the contract from matinee-server PR #21 (merged: `G
 - **300+ Overview gaps and aisle scale with the seats** (about 2.4 and 12) where Figma keeps 4 and 20, because the whole map is one transformed layer. The 0.5× Overview is exact. The "Screen" bar is the flat pill Figma draws, not a curve.
 - **Plus steps to a 1.5× stop** so it is never a dead control while zoomed.
 - **`EmptyState` is vertically centred** by the shared component; Figma `57:8080` draws the sold-out message right under the header. I tried wrapping it and that collapsed the shared component (`flex: 1`), so I reverted rather than fork it.
-- **No haptic on seat select** (COMPONENTS.md asks for one): `expo-haptics` is not installed and was not in the approved plan.
 - **`runOnJS`** is used from Reanimated (deprecated there in favour of `scheduleOnRN` from `react-native-worklets`); `react-native-worklets` is now declared, so switching is possible later.
 
 ## Unproven
 
 - **Neon.** The seats table and 844 seats are not there until Dave runs `npm run db:migrate` then `npm run db:seed -- --seats-only` on matinee-server (see its handoff note). Until then the real screen shows the empty-rows **error** (which is the point of check 1).
 - **A real phone and iOS.** Not run. Frame timing on the emulator: panning the 320-seat room is 22% janky and pinching 28%, against 5.7% for a plain scroll on the same device and touch path, with frame times of 17–19 ms, 0 missed vsyncs and 0 slow-UI-thread frames (`performance.txt`). Not proven on a phone, and a room full of sold seats (one SVG cross each) was not measured. The ADR 0014 fallback is to draw the grid as one `react-native-svg` element.
+- **How the haptics feel, and iOS.** The emulator's vibration log proves the requests were made by Expo Go's native module and when, not how they feel. iOS (`UIImpactFeedbackGenerator` and friends) was not run, and neither was a real Android phone.
 - **TalkBack and VoiceOver.** The accessibility tree exposes each seat ("Row D, seat 8, selected") and the activate actions, but nobody has listened to it.
 - **Seat limit and Continue Toast on iOS.** Android only.
 - One React Native log line appeared once while scrolling the gallery: "Can't cancel already finished gesture". It did not recur and had no visible effect.

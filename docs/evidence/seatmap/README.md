@@ -46,9 +46,11 @@ Driven with a small dev-only mock in front of the real API (not committed) that 
 | `worklets-version-check.txt` | **The worklets JS/native mismatch (0.13.1 vs 0.13.0) and the pin to 0.13.0**, read from the running app. Includes why the library's own check missed it. |
 | `render-counts.txt` | Seat renders on the device: 320 on mount, 0 on zoom, **1 per pick**. |
 | `performance.txt` | Frame timing while panning and pinching the 320-seat room, against a control, with the caveats. |
+| `haptics.txt` | That `expo-haptics` ships in Expo Go, and Android's vibration log around each action: a tick on every pick and drop, a distinct warning at the 8-seat cap, and **nothing** on mount, zoom, pan, pinch, Plus, Minus or Continue. |
 
 ## Not shown, and why
 
 - **Neon.** The seats table and the 844 seats are Dave's step after the server merge (see the server handoff note). Until then the real screen shows the empty-rows error.
 - **iOS, a real phone, TalkBack and VoiceOver.** Not run. The accessibility tree was read with `uiautomator` (each seat exposes "Row D, seat 8, selected"), which shows the labels exist, not how a screen reader speaks them.
+- **How the haptics feel, and iOS haptics.** The emulator proves the requests were made, not how they feel.
 - **A running Countdown, and "seat taken by someone else".** Deferred to the traffic slice. The Countdown is in the gallery only.

@@ -1,0 +1,29 @@
+# Haptics on the seat screen: what fires, and what does not
+Device: Android emulator Pixel_10a (API 37), Expo Go 58.0.5, the 320-seat IMAX showing from the real server.
+Method: Android's own vibration log (`adb shell dumpsys vibrator_manager`, "Recent vibrations"), read before and
+after each action. An emulator proves the requests were made by Expo Go's native module, not how they feel.
+
+## expo-haptics ships in Expo Go (no EAS build)
+- Installed with `npx expo install expo-haptics`, which chose ~58.0.8: Expo SDK 58's own pin in
+  node_modules/expo/bundledNativeModules.json. `npx expo install --check` reports "Dependencies are up to date".
+- Expo Go 58.0.5's classes3.dex contains expo/modules/haptics/HapticsModule (selectionAsync, impactAsync,
+  notificationAsync, performHapticsAsync, vibrate) and registers the module name "ExpoHaptics".
+- Expo Go holds android.permission.VIBRATE; the library also declares it in its own manifest.
+
+## What the vibration log recorded
+| Action | Vibrations recorded |
+|---|---|
+| Open the screen (mount and render of 320 seats) | 0 |
+| Pinch out, pan, pan back, pinch in | 0 |
+| Pick a seat | 1 (selection tick, usage TOUCH, 77 ms on the first, then 52 ms) |
+| Drop that seat | 1 (selection tick) |
+| Tap the row-letter gutter (no seat) | 0 |
+| Plus, then Minus (zoom buttons) | 0 |
+| Pick 8 seats | 8 (one tick each) |
+| Ninth seat (the cap) | 1, a different and longer pattern (usage UNKNOWN, 223 ms), and the selection stays at 8 |
+| Continue (inert, shows its Toast) | 0 |
+Total: 10 ticks + 1 warning = 11, matching the actions one for one.
+
+## Not covered
+- How it feels on a real phone, and iOS (UIImpact/UINotification feedback): not run.
+- Unsupported-device and error paths are covered by unit tests (src/lib/hapticsCore.test.ts), not by this device run.
