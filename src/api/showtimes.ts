@@ -21,7 +21,7 @@ export interface ShowtimeSlot {
   format: string;
   totalSeats: number;
   priceCents: number;
-  /** Server-formatted display price (e.g. "$15.50") so the app never computes money. */
+  /** Server-formatted display price (e.g. "£15.50") so the app never computes money. */
   priceFormatted: string;
 }
 
