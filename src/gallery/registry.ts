@@ -13,6 +13,7 @@ export type GallerySectionId =
   | 'input'
   | 'feedback'
   | 'navigation'
+  | 'seats'
   | 'motion';
 
 export interface GallerySectionSpec {
@@ -44,7 +45,7 @@ export const GALLERY_SECTIONS: readonly GallerySectionSpec[] = [
   {
     id: 'feedback',
     title: 'Feedback',
-    components: ['Toast', 'ToastProvider', 'Skeleton', 'EmptyState'],
+    components: ['Toast', 'ToastProvider', 'Skeleton', 'EmptyState', 'Countdown'],
     docs: '6. Feedback',
   },
   {
@@ -52,6 +53,12 @@ export const GALLERY_SECTIONS: readonly GallerySectionSpec[] = [
     title: 'Navigation and sheets',
     components: ['NavBar', 'BottomSheet'],
     docs: '7. Navigation and sheets',
+  },
+  {
+    id: 'seats',
+    title: 'Seats',
+    components: ['Seat', 'SeatLegend', 'SeatMap'],
+    docs: '8. Seats',
   },
   { id: 'motion', title: 'Motion', components: ['CrossfadeStack'], docs: 'CrossfadeStack (section 6)' },
 ];
@@ -71,9 +78,6 @@ export const PLANNED_COMPONENTS: readonly PlannedComponent[] = [
   { name: 'QRCode', docs: '3. Cards and posters' },
   { name: 'Switch', docs: '4. Selection and labels' },
   { name: 'ListRow', docs: '4. Selection and labels' },
-  { name: 'Countdown', docs: '6. Feedback' },
-  { name: 'Seat', docs: '8. Seats' },
-  { name: 'SeatMap', docs: '8. Seats' },
 ];
 
 export function coveredComponents(): string[] {

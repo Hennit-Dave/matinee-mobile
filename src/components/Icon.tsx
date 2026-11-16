@@ -10,6 +10,8 @@ export type IconName =
   | 'success'
   | 'chevron-left'
   | 'chevron-right'
+  | 'plus'
+  | 'minus'
   | 'home'
   | 'ticket'
   | 'user';
@@ -84,6 +86,13 @@ export function Icon({ name, size = 'lg', color = 'text/primary', accessibilityL
       {name === 'chevron-right' ? (
         <Polyline points="9 6 15 12 9 18" stroke={stroke} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       ) : null}
+      {name === 'plus' ? (
+        <>
+          <Path d="M12 5V19" {...STROKE} stroke={stroke} />
+          <Path d="M5 12H19" {...STROKE} stroke={stroke} />
+        </>
+      ) : null}
+      {name === 'minus' ? <Path d="M5 12H19" {...STROKE} stroke={stroke} /> : null}
       {name === 'home' ? (
         <>
           <Path d="M5 12H3L12 3L21 12H19" {...STROKE} stroke={stroke} />

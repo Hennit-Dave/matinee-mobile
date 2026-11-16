@@ -1,0 +1,7 @@
+# Seat renders on a device (Android emulator, Expo Go), 320-seat IMAX room, from a temporary
+# console.log in Seat (removed before commit). Memoization: React.memo seats, rows memoized on their picks.
+cold mount of the room ........................ 320 seat renders (each seat once)
+zooming in (pinch out) ........................   0
+picking one seat ..............................   1  (only that seat)
+picking a second seat .........................   1
+dropping a seat ...............................   1

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -177,9 +177,13 @@ export default function ShowtimesScreen() {
                               label={slot.time}
                               tabularNums
                               accessibilityLabel={`${cinema.cinemaName}, ${group.format}, ${slot.time}, ${slot.priceFormatted}`}
-                              onPress={() => {
-                                // Seat selection lands in the next slice.
-                              }}
+                              onPress={() =>
+                                router.push({
+                                  pathname: '/showtime/[id]/seats',
+                                  // The title is display-only: the seats screen shows it in its header.
+                                  params: { id: slot.id, ...(params.title ? { title: params.title } : {}) },
+                                } as unknown as Href)
+                              }
                             />
                           ))}
                         </View>

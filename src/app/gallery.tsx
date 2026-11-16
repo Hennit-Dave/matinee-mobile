@@ -13,6 +13,7 @@ import { InputSection } from '../gallery/sections/InputSection';
 import { MotionSection } from '../gallery/sections/MotionSection';
 import { NavigationSection } from '../gallery/sections/NavigationSection';
 import { PlannedSection } from '../gallery/sections/PlannedSection';
+import { SeatsSection } from '../gallery/sections/SeatsSection';
 import { SelectionSection } from '../gallery/sections/SelectionSection';
 import { TypographySection } from '../gallery/sections/TypographySection';
 import { ThemeToggle } from '../gallery/ThemeToggle';
@@ -29,6 +30,7 @@ const SECTION_BODIES: Record<GallerySectionId, ComponentType> = {
   input: InputSection,
   feedback: FeedbackSection,
   navigation: NavigationSection,
+  seats: SeatsSection,
   motion: MotionSection,
 };
 
