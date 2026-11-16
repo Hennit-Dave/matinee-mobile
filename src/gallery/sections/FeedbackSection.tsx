@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Countdown, EmptyState, Skeleton, Text, Toast, useToast } from '../../components';
+import { Button, Countdown, EmptyState, LiveCountdown, Skeleton, Text, Toast, useToast } from '../../components';
+import { readClock, startHoldClock } from '../../api/holdClock';
 import { useTheme } from '../../theme';
 import { primitives } from '../../tokens/tokens';
 import { GalleryGroup, GalleryItem, GalleryPanel, GalleryRow } from '../GalleryParts';
@@ -10,8 +11,12 @@ import { MOCK_TOASTS } from '../mocks';
 const FRAME_HEIGHT = primitives['space/16'] * 5;
 const FRAME_HEIGHT_TALL = primitives['space/16'] * 6;
 
+/** The live demo starts just over 2:00 out, so it crosses into urgent after five seconds and ends after 2:05. */
+const LIVE_DEMO_MS = 125_000;
+
 export function FeedbackSection() {
   const { colors } = useTheme();
+  const [liveClock, setLiveClock] = useState(() => startHoldClock(LIVE_DEMO_MS, readClock()));
   const [lastAction, setLastAction] = useState('none yet');
   const [toastAction, setToastAction] = useState('none yet');
   const toast = useToast();
@@ -20,7 +25,7 @@ export function FeedbackSection() {
     <>
       <GalleryGroup
         name="Countdown"
-        note="The seat-hold countdown, drawn from the seconds it is given: it never counts down by itself (the live hold belongs to the traffic slice). Calm until 2:00; urgent for the last two minutes, the only place orange appears. Tabular figures keep the pill still as digits change."
+        note="The seat-hold countdown, drawn from the seconds it is given: it never counts down by itself (LiveCountdown, below, does). Calm until 2:00; urgent for the last two minutes, the only place orange appears. Tabular figures keep the pill still as digits change."
       >
         <GalleryItem label="calm: 9:58, and 2:00 exactly (still calm)">
           <GalleryRow>
@@ -32,6 +37,27 @@ export function FeedbackSection() {
           <GalleryRow>
             <Countdown secondsRemaining={119} />
             <Countdown secondsRemaining={9} />
+          </GalleryRow>
+        </GalleryItem>
+        <GalleryItem label="ended: 0:00 (the hold-expired sheet sits over this)">
+          <GalleryRow>
+            <Countdown secondsRemaining={0} />
+          </GalleryRow>
+        </GalleryItem>
+      </GalleryGroup>
+
+      <GalleryGroup
+        name="LiveCountdown"
+        note="The Countdown with a clock behind it, as the seat screen uses it. It is seeded with the time the server says is left, ticks on the second, never shows more time than the hold has (a changed clock or a long sleep shorten it, never lengthen it), and tells a screen reader the time at 5:00, 2:00, 1:00 and 0:30 rather than every second. Only the pill re-renders."
+      >
+        <GalleryItem label="live: starts at 2:05, goes urgent at 1:59 and ends at 0:00">
+          <GalleryRow>
+            <LiveCountdown clock={liveClock} />
+            <Button
+              variant="secondary"
+              label="Restart"
+              onPress={() => setLiveClock(startHoldClock(LIVE_DEMO_MS, readClock()))}
+            />
           </GalleryRow>
         </GalleryItem>
       </GalleryGroup>

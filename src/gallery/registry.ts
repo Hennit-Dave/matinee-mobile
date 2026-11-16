@@ -45,7 +45,7 @@ export const GALLERY_SECTIONS: readonly GallerySectionSpec[] = [
   {
     id: 'feedback',
     title: 'Feedback',
-    components: ['Toast', 'ToastProvider', 'Skeleton', 'EmptyState', 'Countdown'],
+    components: ['Toast', 'ToastProvider', 'Skeleton', 'EmptyState', 'Countdown', 'LiveCountdown'],
     docs: '6. Feedback',
   },
   {
