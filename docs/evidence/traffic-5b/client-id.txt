@@ -1,0 +1,30 @@
+THE INSTALL ID AND THE TWO NEW NATIVE MODULES, CHECKED ON THE DEVICE (traffic slice 5b)
+
+Added with `npx expo install expo-secure-store expo-crypto`, so Expo picked its own SDK 58 versions:
+    expo-secure-store ~58.0.3      expo-crypto ~58.0.8
+    `npx expo install --check` -> "Dependencies are up to date"
+    both equal node_modules/expo/bundledNativeModules.json for SDK 58 (the list Expo Go 58 ships)
+app.json gained the expo-secure-store config plugin with { "faceIDPermission": false } (no biometrics are used, so no Face ID
+string is added). It only affects a native build (Android backup rules, so an encrypted value is not restored onto another
+phone); there is no eas.json yet, so no EAS build is needed or triggered by this slice.
+
+Are the native modules IN Expo Go 58.0.5? (Pixel_10a, API 37; `dumpsys package` versionName=58.0.5)
+    base.apk pulled with adb; the dex files contain
+      classes2.dex  expo/modules/crypto/CryptoModule
+      classes3.dex  expo/modules/crypto/CryptoModule, expo/modules/securestore/SecureStoreModule
+      (classes3.dex also has expo/modules/haptics/HapticsModule, the earlier slice's check)
+    The APK carries no per-module version number, so the native version cannot be read the way worklets' could. The match is
+    shown by the three facts above (the pins are Expo's own list for this SDK, the classes are present, and the modules work).
+
+Do they work at runtime?
+    1. A process started BEFORE the packages were installed (pid 7682) and then fast-refreshed with code that imports them
+       logged `Cannot find native module 'ExpoCrypto'` four times (device clock 14:55 to 14:58). A running Expo Go process
+       cannot pick up a module it did not start with. Not a bug in the app or the pins.
+    2. After a force-stop and relaunch (new process pid 30482): no such error. The server's request log shows
+       userId 33063b10-7f80-4b1f-8306-685a8b045271 on every request: expo-crypto made a UUID, the app sent it as X-Client-Id.
+    3. Force-stop again (new process pid 31144): the SAME userId on the next requests. The only place it can have come from is
+       expo-secure-store, so it is persisted across launches. (12 requests carried this single id across both launches.)
+    4. The same id then owned the holds in Redis (owner = 33063b10-...), and the second user saw them as held (hold-lifecycle.txt).
+
+Not checked: a real phone, iOS Keychain, what happens after "clear data" or an uninstall (a new id is made, by design), or the
+Android Keystore failing (the in-memory fallback is unit-tested in clientId.test.ts, not provoked on the device).

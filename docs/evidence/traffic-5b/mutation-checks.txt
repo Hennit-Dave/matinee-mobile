@@ -1,0 +1,40 @@
+MUTATION CHECKS: can the new tests fail?  (traffic slice 5b)
+
+Each line below breaks the code in one specific way, runs the test file that should notice, and restores the file.
+"CAUGHT" means that file went red. All eight were caught; all files were restored and the full suite re-run green
+(276 tests, 0 failing) afterwards. Script: scratchpad only, not committed (it only edits a file, runs node --test, restores it).
+
+M1 seed the countdown from expiresAt instead of the server duration expiresInMs
+   CAUGHT by src/api/holdMachine.test.ts: 3 failing test(s)
+     - Continue takes a hold: idle, then acquiring, then held, with the countdown seeded from expiresInMs
+     - the hold ends when its time is up: held until the last millisecond, then expired, with one release
+     - a timer that fires early just looks again, and the hold still ends on time
+
+M2 elapsed time from the monotonic clock only (a long sleep would lengthen the countdown)
+   CAUGHT by src/api/holdClock.test.ts: 1 failing test(s)
+     - the countdown never shows more time than the hold has: the larger elapsed reading wins
+
+M3 expiry does not give the seats back
+   CAUGHT by src/api/holdMachine.test.ts: 2 failing test(s)
+     - the hold ends when its time is up: held until the last millisecond, then expired, with one release
+     - "Choose seats again" returns to idle, and leaving after expiry does not release a second time
+
+M4 leaving while the request is in flight releases nothing when it lands
+   CAUGHT by src/api/holdMachine.test.ts: 1 failing test(s)
+     - leaving while the request is in flight: no early release, then the seats are given back the moment it succeeds
+
+M5 a network failure is treated as "refused on purpose" (nothing held), so leaving would not release
+   CAUGHT by src/api/holds.test.ts: 1 failing test(s)
+     - classifyHoldError: refused on purpose means nothing is held; no usable answer means maybe
+
+M6 polling ignores the focus and foreground state
+   CAUGHT by src/api/seatsPolling.test.ts: 1 failing test(s)
+     - while paused there is no next refresh at all
+
+M7 own-hold overlay also turns a SOLD seat into an available one
+   CAUGHT by src/components/seatMapLogic.test.ts: 1 failing test(s)
+     - withOwnHold never turns a SOLD seat back into an available one, and leaves available ones alone
+
+M8 the third failed refresh is still tolerated (off by one)
+   CAUGHT by src/api/seats.test.ts: 1 failing test(s)
+     - POLLING TOLERANCE: the THIRD failure in a row is an error again, and the map is not drawn

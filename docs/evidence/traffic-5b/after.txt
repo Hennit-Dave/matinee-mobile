@@ -1,0 +1,28 @@
+AFTER traffic slice 5b: final checks on the finished code (branch feat/seat-holds-mobile)
+
+$ npm run typecheck        -> exit 0 (tsc --noEmit, strict, noUncheckedIndexedAccess)
+$ npm run lint             -> exit 0 (eslint-config-expo, including the React Compiler rules: no setState in effects,
+                               no ref reads or impure calls during render)
+$ npm test                 -> 276 tests, 276 pass, 0 fail, 0 skipped   (unit tests only, as in .github/workflows/ci.yml)
+
+Baseline for comparison: commit 8cfe652 (the tree of main) = 182 tests, 182 pass.
+New: 94 tests = holds 14, clientId 12, holdClock 11, holdMachine 28, seatsPolling 7, seatNotices 6,
+     plus 8 added to seats.test.ts (16 to 24) and 8 added to seatMapLogic.test.ts (40 to 48).
+
+Every commit on the branch builds and passes on its own (typecheck and the whole suite, in a throwaway worktree):
+  7f0ac7e chore(deps)              182 / 182
+  61da886 feat(holds) contract     208 / 208
+  2c4fb34 feat(holds) flow+clock   247 / 247
+  6648816 feat(seats) polling      262 / 262
+  c0f0c57 feat(gallery)            262 / 262
+  7653f29 feat(seats) holds        276 / 276
+
+The tests can fail: mutation-checks.txt (8 of 8 breakages caught).
+
+$ gitleaks detect (git history) -> 37 commits scanned.
+scanned ~1097163 bytes (1.10 MB) in 120ms
+no leaks found
+$ gitleaks detect --no-git (working tree) -> scanned ~677551 bytes (677.55 KB) in 55.4ms
+no leaks found
+.env was never read, written or opened by me. (The Expo CLI itself loads it when it starts Metro and when it runs
+`expo install`; the EXPO_PUBLIC_API_URL I used for the device runs was passed inline.)

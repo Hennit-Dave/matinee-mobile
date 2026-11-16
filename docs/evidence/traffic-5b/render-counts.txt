@@ -1,0 +1,23 @@
+# Seat renders on a device (Android emulator, Expo Go), 320-seat IMAX room, traffic slice 5b.
+# Method: a temporary console.log('SEAT_RENDER ...') as the first line of the Seat component, counted in logcat after
+# clearing it before each step, then REMOVED (git checkout src/components/Seat.tsx; nothing of it is in the PR).
+# Same method as docs/evidence/seatmap/render-counts.txt. Memoization: React.memo seats, rows memoized on their picks.
+#
+# The 5b risk: the screen now refreshes the map every ~5 s and rewrites the caller's own held seats (withOwnHold). If either
+# made new objects for every row, every poll would redraw the room.
+#
+cold mount of the room ............................................ 326  (320 seats, plus 6 whose state changed in the first polls as
+                                                                          earlier test holds expired; the earlier slice measured 320 on a static room)
+idle, two or more polls with nothing changed (12 s) ............... 0
+another user takes ONE seat, next poll ............................ 1  (only that seat)
+that user lets it go, next poll ................................... 1
+I pick one seat (idle layout) ..................................... 1
+I pick a second seat .............................................. 1  (re-checked; see note)
+I press Continue: my hold is taken, two seats ..................... 0  (they look the same: "Yours")
+holding, two or more polls that now report my seats as `held` ..... 0  (withOwnHold keeps them "Yours" and keeps untouched rows as the same objects)
+holding, another user takes ONE seat, next poll ................... 1
+
+note: in my first pass the second pick showed 0. The other user's earlier 150 s hold on that seat had not quite expired when I
+tapped it, so the app correctly ignored the tap (a held seat is not selectable) and only one seat was then held. I released,
+picked it again on the idle layout (1 render, and the earlier pick stayed picked) and reran the hold steps with both seats:
+the three "holding" rows above are from that clean rerun.

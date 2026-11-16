@@ -1,0 +1,31 @@
+POLLING PAUSES AND RESUMES (traffic slice 5b)
+
+Rule (src/api/seatsPolling.ts): the seat map refreshes every 5 s +/- 20 % (4 to 6 s, drawn fresh each time) while the
+seat screen is on top AND the app is in the foreground. It pauses otherwise, refreshes at once on return, and stops after
+three failed refreshes in a row.
+
+How it was measured: the SERVER's own structured request log is the oracle, not the app. Each window counts lines for
+route /showtimes/:id/seats that carry this install's userId (X-Client-Id), between two timestamps taken with `date`.
+Android emulator Pixel_10a, Expo Go 58.0.5, throwaway local server (main at fa7b363), screen opened by deep link.
+Focus is checked with `dumpsys window` (ExperienceActivity = the app; Activity/HomeActivity = it is not in front).
+
+  A  seat screen focused, app in foreground, 30 s ........ 6 requests    (about one every 5 s)
+  B  gallery pushed on top (seat screen blurred), 25 s .... 0 requests
+  C  system BACK to the seat screen, first 3 s ............ 1 request     (an immediate refresh, not a wait)
+  D  app sent to the background (HOME), 25 s .............. 0 requests
+  E  app brought back to the foreground, first 3 s ........ 1 request     (an immediate refresh)
+  F  then polling continues, next 12 s .................... 2 requests
+
+Failure behaviour, Redis stopped under a running screen (see hold-lifecycle.txt for the timestamps):
+  poll failures at 21:04:13.689, 21:04:18.806, 21:04:23.591 (three in a row, each a 503 from the server)
+    1st failure: Toast "Can't refresh seats. Trying again..." and the map stays (11-stale-map-one-failed-poll-light.jpg)
+    3rd failure: the existing "Server overloaded" state, Try again (12-three-failed-polls-error-light.jpg)
+    after the 3rd: NO further request in the next 12 s (polling stopped)
+  Redis restarted, Try again tapped: GET 200 at 21:05:02.635, map back with the pick kept (13-recovered-after-try-again-light.jpg)
+
+A run I threw away: my FIRST attempt at windows B to F used `adb shell monkey` to bring the app back, which starts Expo Go's
+HOME activity, not the Matinee screen. Its C, E and F counts (0, 0, 0) were therefore not measurements of the app and are
+not reported. The run above replaced it, with focus checked at every step.
+
+What this does NOT show: battery or radio cost, a real phone, or iOS. The wiring (usePollActive, useShowtimeSeats) is not
+unit-tested (no React Native renderer in this repo, ADR 0005); the pure rules are (seatsPolling.test.ts, 7 tests).
