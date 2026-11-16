@@ -55,7 +55,7 @@ const SHOWTIMES_RESULT: ShowtimesFetchResult = {
                 format: 'Standard',
                 totalSeats: 120,
                 priceCents: 1200,
-                priceFormatted: '$12.00',
+                priceFormatted: '£12.00',
               },
             ],
           },
