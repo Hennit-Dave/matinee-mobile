@@ -1,0 +1,18 @@
+# react-native-worklets: JS vs native version, read from the RUNNING app
+Device: Android emulator Pixel_10a (API 37), Expo Go 58.0.5 (SDK 58). Read with a temporary one-line probe
+(removed before commit) that logged globalThis._WORKLETS_VERSION_JS / _WORKLETS_VERSION_CPP / _REANIMATED_VERSION_CPP.
+
+Before the pin (package.json had no direct entry; npm had resolved the peer to 0.13.1):
+  [probe] worklets js=0.13.1 native=0.13.0 reanimatedNative=4.7.1
+
+After `npm install --save-exact react-native-worklets@0.13.0` (Expo SDK 58's pinned version, same as
+node_modules/expo/bundledNativeModules.json):
+  [probe] worklets js=0.13.0 native=0.13.0 reanimatedNative=4.7.1
+
+Why the app never complained before the pin: Worklets' own check (node_modules/react-native-worklets/src/debug/
+checkCppVersion.ts, matchVersion) compares only MAJOR and MINOR for x.y.z versions and skips the patch
+("x.y.z, compare only major and minor, skip patch"). 0.13.1 vs 0.13.0 passes it silently, so the absence of a
+"[Worklets] Mismatch" error proved nothing. The mismatch was only visible by reading the native version.
+
+Gestures run on the pinned versions (all on the device, 0 worklets or JS errors in the log): tap, tap-to-zoom
+animation (Reanimated withTiming), one-finger pan, and a real two-finger pinch out and in.

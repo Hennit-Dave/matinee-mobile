@@ -1,0 +1,42 @@
+# Frame timing, Android emulator (Pixel_10a, API 37, Apple silicon host), Expo Go dev build, 320-seat room
+# Method: adb shell dumpsys gfxinfo host.exp.exponent (reset before each run); touches sent through the emulator's gRPC sendTouch.
+# An EMULATOR, so absolute numbers do not carry to a phone; the control is on the same device and touch path.
+
+## A. Pan the zoomed 320-seat map (10 drags each way)
+Total frames rendered: 419
+Janky frames: 94 (22.43%)
+Janky frames (legacy): 7 (1.67%)
+50th percentile: 17ms
+90th percentile: 18ms
+95th percentile: 19ms
+99th percentile: 23ms
+Number Missed Vsync: 0
+Number Slow UI thread: 0
+
+## B. Pinch out then in, 6 cycles, on the 320-seat room
+Total frames rendered: 326
+Janky frames: 92 (28.22%)
+Janky frames (legacy): 0 (0.00%)
+50th percentile: 17ms
+90th percentile: 18ms
+95th percentile: 19ms
+99th percentile: 19ms
+Number Missed Vsync: 0
+Number Slow UI thread: 0
+
+## Control: scroll the long component gallery (a plain page), 10 drags each way
+Total frames rendered: 636
+Janky frames: 36 (5.66%)
+Janky frames (legacy): 0 (0.00%)
+50th percentile: 17ms
+90th percentile: 17ms
+95th percentile: 18ms
+99th percentile: 19ms
+Number Missed Vsync: 0
+Number Slow UI thread: 0
+
+## Reading it
+Frame times are 17-19 ms (vsync-bound at 60 Hz) with 0 missed vsyncs and 0 slow-UI-thread frames, but the map is rougher than a
+plain scroll here: 22% (pan) and 28% (pinch) of frames count as janky against 5.7% for the control. In this room every seat is
+an available outline (no SVG marks); a room full of sold seats draws one SVG cross per seat and was NOT measured.
+NOT proven on a real phone. The ADR fallback if a phone shows jank: draw the seat grid as one react-native-svg element.

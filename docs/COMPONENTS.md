@@ -288,6 +288,7 @@ Rules that apply to every component:
   - Urgent is also signalled by the filled pill, not colour alone.
   - Announce time left to screen readers at sensible intervals, not every second.
 - **Tabular figures:** on for `time`.
+- **Built (seat-selection slice).** Code: `src/components/Countdown.tsx`, decisions in `countdownLogic.ts`. Props: `secondsRemaining: number` (not a `time` string: the pill formats it itself, "9:58", and works out the state). Urgent is strictly under 2:00, so 2:00 is still calm and 1:59 is urgent. It is **presentational and never counts down on its own**: the live seat hold, and so the live timer, belong to the traffic slice. Nothing mounts it on a real screen yet (a frozen "10:00 left" with no hold behind it would mislead), so only the gallery shows it. It is one `timer` element read out as words ("9 minutes 58 seconds left"); periodic announcements arrive with the live timer.
 
 ### EmptyState
 - **Figma:** `EmptyState` (`19:21`). **Code:** `EmptyState`.
@@ -375,11 +376,14 @@ Rules that apply to every component:
 - Size `size/seat` (36), gap `size/seat-gap` (8), `border-width/strong`, radius `radius/sm` (circle uses `radius/full`).
 - **Hit slop:** the zoomed seat is 36 with an 8 gap, so use `hitSlop` of 6 on each side to reach 48. Neighbouring slop areas overlap by 4, so the nearest seat centre wins. Test on a real device.
 - Announce row, number and state to screen readers ("Row D, seat 8, available").
+- **Built (seat-selection slice).** Code: `src/components/Seat.tsx` (the look of each state, drawn from the Figma `SeatMap/Seat` artwork: tick, cross, 6-line hatch and wheelchair glyph in the seat's own 36 × 36 space, so they scale with it). Props: `state`, `size` (default 36; the legend draws 24), and, only for the map, `seatId`, `accessibilityLabel` and `onActivate` (a screen-reader activation). It is `React.memo` with primitive props only. **It is exported** (the legend and the gallery use it) although the spec called it internal. The tick pops in with Reanimated when a seat is picked (not with reduced motion). **No haptic yet:** `expo-haptics` is not installed and was not in the approved plan.
+- **Hit slop:** not per-seat `hitSlop`. The map hit-tests the whole tap in one place (nearest seat centre within half a seat pitch), which implements the same rule with one handler instead of 320 touchables (ADR 0014).
 
 ### SeatMap / Legend
 - **Figma:** `SeatMap/Legend` (`19:59`). **Code:** `SeatLegend`.
 - **Props:** none. It is a fixed list of the six looks in two columns.
 - **Tokens:** the `seat/*` tokens above, `type/caption`, `text/secondary`, `size/icon-lg`, `space/2`, `space/4`.
+- **Built.** Code: `src/components/SeatLegend.tsx`; the entries and their words come from `SEAT_LEGEND_ITEMS` in `seatMapLogic.ts`, and a test fails if one seat look is missing. Each entry is one spoken label; the swatch is decorative.
 
 ### SeatMap
 - **Figma:** `SeatMap` (`54:4988`), 4 levels. **Code:** `SeatMap`.
@@ -400,6 +404,14 @@ Rules that apply to every component:
   - Seat state and prices come from the server. The app never computes them.
   - Selection feedback uses Reanimated and a haptic.
   - Tense moment: the map and the hold `Countdown` are the only places the design is allowed to feel tense.
+- **Built (seat-selection slice).** Code: `src/components/SeatMap.tsx`; every decision that can be tested without a renderer is in `seatMapLogic.ts` (layout, which seat a tap lands on, zoom and pan limits, selection, mini-map, labels). Decision record: matinee-server `docs/decisions/0014-seat-data-model-and-seat-map-rendering.md`.
+  - **Props (differ from the table above):** `rows` and `totalSeats` (the server's room), `selectedIds`, `onSelectSeat(id)`, `loading` (the Skeleton level), and `initialZoomedSeatId` (the gallery starts zoomed with it). The level is derived inside from room size and zoom; there is no `onZoom(region)` because a tap on the Overview zooms by itself.
+  - **How it works:** the whole map is one layer moved and scaled on the UI thread (Reanimated), so a gesture re-renders no React. Rows are memoized on their own picked seats, so **picking a seat re-renders one seat, not 320** (measured on a device: 1 `Seat` render per pick; a cold mount renders all 320 once). Pinch settles on the Overview, full size, or 1.5×; pan only exists while zoomed, so the Overview never swallows a parent list's scroll. Plus steps 1× to 1.5× so it is never a dead control; Minus steps back.
+  - **Deviations from Figma, on purpose:**
+    - The whole map is one scaled layer, so at the 0.3× 300+ Overview the gaps and the aisle scale with the seats (about 2.4 and 12) where Figma keeps them at 4 and 20. The 0.5× Overview is exact (18 seats, 4 gaps, 20 aisle, 328 wide for a 14-seat row).
+    - The "Screen" bar is the flat pill Figma draws (its layer is named "arc"), not a curve.
+    - The aisle is drawn after seat `ceil(n / 2)`; it is not in the data.
+  - **Accessibility:** zoomed, every seat is its own element ("Row D, seat 8, held by someone else") with an activate action; the Overview is one element ("Seat map, 320 of 320 seats available. Double tap to zoom in.") with a zoom action, so a screen-reader user is never stranded behind a pinch. Not yet checked with TalkBack or VoiceOver.
 
 ---
 
@@ -415,7 +427,7 @@ Rules that apply to every component:
 | `accessible` | Accessible seat |
 | `chevron-right`, `chevron-left` | ListRow, back buttons |
 | `home`, `ticket`, `user` | NavBar |
-| `plus`, `minus` | Seat map zoom |
+| `plus`, `minus` | Seat map zoom (**built**, seat-selection slice; geometry from the Figma `Icon/Plus` and `Icon/Minus` assets) |
 
 - Sizes `size/icon-sm` (16), `size/icon-md` (20), `size/icon-lg` (24). Colour comes from a semantic token passed in, never a raw hex.
 - There are no offline, settings or wrench icons. System screens reuse `info` and `error` on purpose.
@@ -467,7 +479,7 @@ The in-app living style guide required by RULES.md D3.4. Every component in the 
 - **Open it:** it is not linked from the app. Go to the path `/gallery`. In a dev build use `matinee://gallery`; in Expo Go use `exp://<host>:8081/--/gallery` (for example `adb shell am start -a android.intent.action.VIEW -d "exp://127.0.0.1:8081/--/gallery" host.exp.exponent`).
 - **Code:** the route is `src/app/gallery.tsx`. The sections live in `src/gallery/` (not under `src/app/`, so they are not routes). What the gallery covers is declared in `src/gallery/registry.ts`.
 - **Light and dark:** the System / Light / Dark chips at the top switch the whole app with the platform's own override (`Appearance.setColorScheme`); the gallery hands control back to the device setting when it closes.
-- **Sections follow the Figma Gallery page (`73:3973`):** Typography, Buttons, Cards and posters, Selection and labels, Input, Feedback, Navigation and sheets, plus Icons and Motion for components Figma draws no gallery frame for.
+- **Sections follow the Figma Gallery page (`73:3973`):** Typography, Buttons, Cards and posters, Selection and labels, Input, Feedback, Navigation and sheets, plus Icons, Seats and Motion for components Figma draws no gallery frame for.
 - **States that are not props** (pressed, focused) cannot be drawn statically, so the gallery says how to see them (press and hold a button, tap a field).
 - **Rule: a new component is not done until it is in the gallery.** `src/gallery/registry.test.ts` fails CI if a component is exported from `src/components/index.ts` without an entry in `GALLERY_SECTIONS`, or if a component is listed as planned after it has been built.
-- **Not built yet:** QRCode, Switch, ListRow, Countdown, Seat and SeatMap are specified above and drawn in Figma but do not exist in code, so they are listed at the bottom of the gallery rather than shown. Move each into a section when it is built.
+- **Not built yet:** QRCode, Switch and ListRow are specified above and drawn in Figma but do not exist in code, so they are listed at the bottom of the gallery rather than shown. Move each into a section when it is built. (`Seat`, `SeatLegend` and `SeatMap` are in the Seats section, and `Countdown` is under Feedback.)
