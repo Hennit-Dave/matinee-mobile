@@ -3,9 +3,14 @@ import { useEffect, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatMovieMeta, normaliseSearchQuery } from '../api/movies';
-import { formatFilmCount, isOfflineNetworkError, resolveSearchMode } from '../api/searchHelpers';
+import {
+  RATE_LIMITED_SEARCH_MESSAGE,
+  formatFilmCount,
+  resolveSearchMode,
+  searchErrorCopy,
+} from '../api/searchHelpers';
 import { useDiscoverMovies, useGenres, useSearchMovies } from '../api/useMovies';
-import { Button, Chip, EmptyState, Icon, Input, SearchResultRow, Skeleton, Text } from '../components';
+import { Button, Chip, EmptyState, Icon, Input, SearchResultRow, Skeleton, Text, useToast } from '../components';
 import { useTheme } from '../theme';
 import { primitives } from '../tokens/tokens';
 
@@ -16,6 +21,7 @@ const SKELETON_CHIPS = [84, 104, 76, 116, 72, 92];
 export default function Search() {
   const router = useRouter();
   const { colors } = useTheme();
+  const toast = useToast();
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedGenreId, setSelectedGenreId] = useState<number | null>(null);
@@ -35,6 +41,14 @@ export default function Search() {
   const discoverQuery = useDiscoverMovies(mode === 'genre' ? selectedGenreId : null, 1);
   const activeQuery = mode === 'genre' ? discoverQuery : textQuery;
   const { status, movies, totalResults, error, isFetching, refetch } = activeQuery;
+
+  // The server said "too many searches" (429, ADR 0016): say so once, and let the search ask again after its
+  // Retry-After by itself. `status` stays `loading` meanwhile, so the skeleton stays instead of "Search failed".
+  const waitingOnRateLimit = mode === 'text' && textQuery.rateLimited;
+  useEffect(() => {
+    if (waitingOnRateLimit) toast.show({ message: RATE_LIMITED_SEARCH_MESSAGE, tone: 'info' });
+  }, [waitingOnRateLimit, toast]);
+  const errorCopy = searchErrorCopy(error);
 
   const clearAll = () => {
     setQuery('');
@@ -186,12 +200,8 @@ export default function Search() {
       {mode !== 'idle' && status === 'error' ? (
         <EmptyState
           icon="error"
-          headline={isOfflineNetworkError(error) ? 'You’re offline' : 'Search failed'}
-          body={
-            isOfflineNetworkError(error)
-              ? 'Search needs a connection. Your saved tickets still open without one.'
-              : error?.message ?? 'Check your connection and try again.'
-          }
+          headline={errorCopy.headline}
+          body={errorCopy.body}
           actionLabel={isFetching ? 'Retrying…' : 'Try again'}
           onAction={refetch}
         />
