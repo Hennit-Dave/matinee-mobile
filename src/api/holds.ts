@@ -1,6 +1,6 @@
 import { clientIdHeaders } from './clientId';
 import { readApiBaseUrl } from './config';
-import { MovieApiError, fetchApiJson } from './movies';
+import { MovieApiError, fetchApiJson, retryAfterMs } from './movies';
 import { isShowtimeId } from './seats';
 
 /**
@@ -100,7 +100,7 @@ export async function releaseHold(
 
 // ---- What a failed hold means ---------------------------------------------------------------------
 
-/** How long to wait before retrying when the server gave no `Retry-After` (it sends 2 s, ADR 0015). */
+/** How long to wait before retrying when the server gave no `Retry-After` (a 503 sends 2 s, ADR 0015; a 429 always sends one). */
 export const DEFAULT_RETRY_AFTER_MS = 2_000;
 
 /**
@@ -112,6 +112,9 @@ export const DEFAULT_RETRY_AFTER_MS = 2_000;
  *   is held (a hold is all or nothing).
  * - `unavailable`: 503 `holds_unavailable`. Redis is down or did not answer, so the server refuses new holds
  *   (fail closed). A command sent just before the outage can still run later, so the seats MAY be held.
+ * - `rateLimited`: 429 `rate_limited`. The limiter answers BEFORE the hold script runs (ADR 0016: limiter, then body,
+ *   then handler), so the request was never processed and nothing is held. This is the difference from a 503, where
+ *   a command may already have been sent to Redis. Like a 503 it carries `Retry-After`, which the hold flow waits out.
  * - `rejected`: any other answer the server gave on purpose (400 validation, 404 not found, ...). Nothing is held.
  * - `uncertain`: no usable answer (network error, timeout, an unreadable or unexpected response). The request may
  *   or may not have been processed. Asking again is safe: a repeated hold from the same owner returns the
@@ -120,6 +123,7 @@ export const DEFAULT_RETRY_AFTER_MS = 2_000;
 export type HoldFailure =
   | { kind: 'taken'; seatIds: string[]; maybeHeld: false }
   | { kind: 'unavailable'; retryAfterMs: number; maybeHeld: true }
+  | { kind: 'rateLimited'; retryAfterMs: number; maybeHeld: false }
   | { kind: 'rejected'; message: string; maybeHeld: false }
   | { kind: 'uncertain'; maybeHeld: true };
 
@@ -130,12 +134,10 @@ export function classifyHoldError(error: unknown): HoldFailure {
     return { kind: 'taken', seatIds: error.seatIds ?? [], maybeHeld: false };
   }
   if (error.kind === 'holds_unavailable') {
-    const seconds = error.retryAfterSeconds;
-    return {
-      kind: 'unavailable',
-      retryAfterMs: seconds === undefined ? DEFAULT_RETRY_AFTER_MS : seconds * 1000,
-      maybeHeld: true,
-    };
+    return { kind: 'unavailable', retryAfterMs: retryAfterMs(error, DEFAULT_RETRY_AFTER_MS), maybeHeld: true };
+  }
+  if (error.kind === 'rate_limited') {
+    return { kind: 'rateLimited', retryAfterMs: retryAfterMs(error, DEFAULT_RETRY_AFTER_MS), maybeHeld: false };
   }
   // No answer, an unreadable answer, or a failure inside the server: whether the hold happened is unknown.
   if (

@@ -1,3 +1,4 @@
+import { clientIdHeaders, isClientId } from './clientId';
 import { readApiBaseUrl } from './config';
 
 /**
@@ -45,6 +46,10 @@ export interface MovieDetail {
 
 /**
  * Mirrors matinee-server/src/http/errors.ts.
+ *
+ * `rate_limited` is a 429 (ADR 0016): the caller made too many requests to a limited route (hold, booking, search,
+ * seat map) and must wait. The wait is in the `Retry-After` header, in whole seconds, not in the body. The limiter
+ * runs BEFORE the route's own work, so a 429 means the request was not processed at all.
  */
 export type ApiErrorCode =
   | 'not_found'
@@ -56,7 +61,8 @@ export type ApiErrorCode =
   | 'upstream_unavailable'
   | 'seat_taken'
   | 'seat_not_held'
-  | 'holds_unavailable';
+  | 'holds_unavailable'
+  | 'rate_limited';
 
 export interface ApiErrorDetail {
   path: string;
@@ -146,10 +152,25 @@ export class MovieApiError extends Error {
     this.retryable =
       options.retryable ??
       (options.status === 503 ||
+        options.status === 429 ||
+        options.kind === 'rate_limited' ||
         options.kind === 'upstream_unavailable' ||
         options.kind === 'service_unavailable' ||
         options.kind === 'network_error');
   }
+}
+
+/** The server said "too many requests" (429 `rate_limited`). Nothing was processed; wait `Retry-After`, then ask again. */
+export function isRateLimitedError(error: unknown): error is MovieApiError {
+  return error instanceof MovieApiError && error.kind === 'rate_limited';
+}
+
+/**
+ * How long the server asked the caller to wait, in milliseconds, or `fallbackMs` when it sent no (usable)
+ * `Retry-After`. Bounded already: `parseRetryAfter` caps what a header can ask for.
+ */
+export function retryAfterMs(error: MovieApiError, fallbackMs: number): number {
+  return error.retryAfterSeconds === undefined ? fallbackMs : error.retryAfterSeconds * 1000;
 }
 
 /** Mirrors server normaliseQuery: trim, collapse whitespace, lowercase. */
@@ -298,7 +319,9 @@ export async function fetchApiJson<T>(
     throw new MovieApiError('Received an unreadable response from the server.', {
       status: res.status,
       kind: res.status === 503 ? 'service_unavailable' : 'invalid_response',
-      retryable: res.status === 503,
+      // A 429 whose body cannot be read is still "wait and ask again". It is NOT called `rate_limited`: without the
+      // server's envelope we cannot tell our limiter from something in front of it, so a hold treats it as unclear.
+      retryable: res.status === 503 || res.status === 429,
     });
   }
 
@@ -348,11 +371,18 @@ export async function fetchPopularMovies(
   return fetchApiJson(buildPopularMoviesUrl(baseUrl, page), isMoviesPage, signal);
 }
 
+/**
+ * `clientId` is the install id (clientId.ts). Search does not need one, but with it the server also counts the
+ * install's own searches (the per-user limit, ADR 0016); without it only the address is counted. An id that is not
+ * a UUID is NOT sent: the server answers a malformed one with a 400, and search must never break over a header
+ * that is optional.
+ */
 export async function fetchSearchMovies(
   query: string,
   page = 1,
   signal?: AbortSignal,
-  baseUrl: string = readApiBaseUrl()
+  baseUrl: string = readApiBaseUrl(),
+  clientId?: string
 ): Promise<MoviesFetchResult> {
   const normalised = normaliseSearchQuery(query);
   if (!normalised) {
@@ -362,7 +392,13 @@ export async function fetchSearchMovies(
       retryable: false,
     });
   }
-  return fetchApiJson(buildSearchMoviesUrl(baseUrl, normalised, page), isMoviesPage, signal);
+  const headers = isClientId(clientId) ? clientIdHeaders(clientId) : undefined;
+  return fetchApiJson(
+    buildSearchMoviesUrl(baseUrl, normalised, page),
+    isMoviesPage,
+    signal,
+    headers ? { headers } : {}
+  );
 }
 
 export async function fetchMovieDetail(

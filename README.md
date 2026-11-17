@@ -90,6 +90,27 @@ build.
 
 Evidence and the measurements behind these claims: `docs/evidence/traffic-5b/`.
 
+## Too many requests (429)
+
+The server limits holds, search and the seat map per install and per address (server: ADR 0016). A limited request gets
+a `429 rate_limited` with a `Retry-After` in seconds, and the app waits that long instead of failing.
+
+- **Holds.** Continue is refused: a Toast says "Slow down a moment, then try again." with **Try again**. Nothing was held (the
+  limiter answers before the hold is attempted), so leaving the screen sends no release; that is the difference from a 503,
+  where a hold may exist. Try again waits out `Retry-After` before it sends, like it does after a 503; the button shows
+  it is working meanwhile.
+- **Search.** A Toast says "Slow down a moment. Searching again shortly…", the skeleton stays, and the app asks again by
+  itself after `Retry-After` (never sooner than a second). After three automatic retries it stops and shows
+  "Too many searches" with a manual **Try again**, so a busy shared address cannot make the phone ask forever.
+  Search now sends `X-Client-Id`, so the per-install search limit applies as well as the per-address one.
+- **The seat map polling is untouched.** A stray 429 there is covered by the existing rule: one or two failed refreshes
+  keep the map and show one Toast, the third in a row is the error screen.
+- `Retry-After` is read as whole seconds and capped at 60. A 429 whose body is not the server's error shape is retryable
+  but is not treated as "nothing held": a hold stays cautious, because it cannot be told apart from something in front of the
+  server.
+
+Evidence: `docs/evidence/traffic-5c/`.
+
 ## Docs
 
 - `AGENTS.md` — how AI agents work in this repo

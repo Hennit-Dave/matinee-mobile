@@ -18,6 +18,8 @@ function hold(seatIds: string[] = [A, B], expiresInMs = 600_000): HoldResponse {
 const taken = (...seatIds: string[]) => new MovieApiError('taken', { status: 409, kind: 'seat_taken', seatIds });
 const unavailable = (retryAfterSeconds?: number) =>
   new MovieApiError('down', { status: 503, kind: 'holds_unavailable', retryAfterSeconds });
+const limited = (retryAfterSeconds?: number) =>
+  new MovieApiError('slow down', { status: 429, kind: 'rate_limited', retryAfterSeconds });
 const offline = () => new MovieApiError('offline', { status: 0, kind: 'network_error' });
 const refused = () => new MovieApiError('bad request', { status: 400, kind: 'validation_failed' });
 
@@ -213,6 +215,109 @@ test('leaving while waiting out Retry-After cancels the wait and releases what t
   h.advance(5_000);
   assert.equal(h.calls.acquire.length, 1, 'the delayed request is never sent');
   assert.deepEqual(h.calls.release, [[A, B]], 'a command sent just before the outage may still land: give it back');
+});
+
+// A 429 is waited out like a 503, but unlike a 503 it cannot have left a hold behind (ADR 0016: the limiter runs
+// before the hold script).
+
+test('429 rate_limited: idle with a rateLimited outcome, and the NEXT attempt waits out Retry-After before it is sent', async () => {
+  const h = harness();
+  h.controller.acquire([A, B]);
+  h.acquires[0]!.reject(limited(7));
+  await flush();
+  assert.equal(h.controller.getState().phase, 'idle');
+  assert.deepEqual(h.controller.getState().outcome, { id: 1, kind: 'rateLimited' });
+
+  h.controller.acquire([A, B]);
+  assert.equal(h.controller.getState().phase, 'acquiring', 'the button shows it is working');
+  assert.equal(h.calls.acquire.length, 1, 'but nothing is sent yet');
+
+  h.advance(6_999);
+  assert.equal(h.calls.acquire.length, 1, 'still inside the 7 s the server asked for');
+  h.advance(2);
+  assert.equal(h.calls.acquire.length, 2, 'sent once Retry-After has passed');
+
+  h.acquires[1]!.resolve(hold([A, B]));
+  await flush();
+  assert.equal(h.controller.getState().phase, 'held');
+});
+
+test('429 without a Retry-After falls back to 2 s', async () => {
+  const h = harness();
+  h.controller.acquire([A]);
+  h.acquires[0]!.reject(limited());
+  await flush();
+  h.controller.acquire([A]);
+  h.advance(1_900);
+  assert.equal(h.calls.acquire.length, 1);
+  h.advance(200);
+  assert.equal(h.calls.acquire.length, 2);
+});
+
+test('429 means nothing is held: leaving sends NO release (the difference from a 503)', async () => {
+  const limitedRun = harness();
+  limitedRun.controller.acquire([A, B]);
+  limitedRun.acquires[0]!.reject(limited(5));
+  await flush();
+  limitedRun.controller.detach();
+  assert.deepEqual(limitedRun.calls.release, [], 'the limiter refused before the hold script: nothing of ours exists');
+
+  const downRun = harness();
+  downRun.controller.acquire([A, B]);
+  downRun.acquires[0]!.reject(unavailable(5));
+  await flush();
+  downRun.controller.detach();
+  assert.deepEqual(downRun.calls.release, [[A, B]], 'a 503 may have left a hold behind, so it is given back');
+});
+
+test('leaving while waiting out a 429 cancels the wait and still sends no release', async () => {
+  const h = harness();
+  h.controller.acquire([A, B]);
+  h.acquires[0]!.reject(limited(5));
+  await flush();
+  h.controller.acquire([A, B]); // waiting
+  h.controller.detach();
+  h.advance(10_000);
+  assert.equal(h.calls.acquire.length, 1, 'the delayed request is never sent');
+  assert.deepEqual(h.calls.release, []);
+});
+
+test('a 429 after an unclear failure for the SAME seats still releases them on leaving (the first try may have landed)', async () => {
+  const h = harness();
+  h.controller.acquire([A, B]);
+  h.acquires[0]!.reject(offline()); // no answer: it may have been processed
+  await flush();
+  h.controller.acquire([A, B]);
+  h.acquires[1]!.reject(limited(5)); // the second was refused, which says nothing about the first
+  await flush();
+  assert.equal(h.controller.getState().outcome?.kind, 'rateLimited');
+  h.controller.detach();
+  assert.deepEqual(h.calls.release, [[A, B]]);
+});
+
+test('a 429 on new seats does not forget seats an earlier unclear try may have left held', async () => {
+  const h = harness();
+  h.controller.acquire([A]);
+  h.acquires[0]!.reject(offline());
+  await flush();
+  h.controller.acquire([B]);
+  h.acquires[1]!.reject(limited(5)); // B was never processed; A might have been
+  await flush();
+  h.controller.detach();
+  assert.deepEqual(h.calls.release, [[A]]);
+});
+
+test('a 429 outcome gets its own id, so the screen shows it once and shows the next one too', async () => {
+  const h = harness();
+  h.controller.acquire([A]);
+  h.acquires[0]!.reject(limited(1));
+  await flush();
+  h.advance(1_000);
+  h.controller.acquire([A]);
+  h.advance(1_000);
+  h.acquires[1]!.reject(limited(1));
+  await flush();
+  assert.deepEqual(h.controller.getState().outcome, { id: 2, kind: 'rateLimited' });
 });
 
 test('no usable answer (offline): an "uncertain" outcome, retrying is allowed at once, and leaving releases', async () => {

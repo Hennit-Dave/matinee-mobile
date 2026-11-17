@@ -1,0 +1,60 @@
+AFTER traffic slice 5c (mobile): final checks on the finished code (branch feat/rate-limiting-mobile)
+
+$ npm run typecheck   -> exit 0 (tsc --noEmit, strict, noUncheckedIndexedAccess)
+$ npm run lint        -> exit 0 (eslint-config-expo)
+$ npm test            -> ℹ tests 302 ℹ pass 302 ℹ fail 0 ℹ skipped 0  (unit tests only, as in .github/workflows/ci.yml)
+
+Baseline for comparison: commit af78c13 (the tree of main plus the baseline evidence) = 276 tests, 276 pass.
+New: 26 tests = holds.test.ts +7, holdMachine.test.ts +7, seatNotices.test.ts +1, searchClientId.test.ts 3, searchRateLimit.test.ts 8.
+
+Every commit on the branch typechecks and passes on its own (checked in a throwaway worktree):
+  af78c13  test(rate-limit): baseline for 429 handling and X-Client-Id on s   typecheck ok, 276 of 276 pass, 0 fail
+  e7a64a1  feat(api): mirror the 429 rate_limited error and send X-Client-I   typecheck ok, 286 of 286 pass, 0 fail
+  a78dcf1  feat(seats): wait out a 429 on Continue and say slow down a mome   typecheck ok, 294 of 294 pass, 0 fail
+  987e227  feat(search): toast and retry a rate-limited search after Retry-   typecheck ok, 302 of 302 pass, 0 fail
+
+The tests can fail: mutation-checks.txt (12 of 12 deliberate breakages caught; each file restored; 302 of 302 green afterwards).
+
+Polling was not touched: `git diff acb4855 -- src/api/seats.ts src/api/seatsPolling.ts src/api/useSeats.ts src/api/usePollActive.ts` and their tests: no changes.
+No new dependency, no new environment variable, no native build, no migration. tokens.ts, .env and LEARNING-LOG.md were not touched.
+
+$ gitleaks detect (git history)      -> 44 commits scanned, no leaks found
+$ gitleaks detect --no-git (tree)    -> no leaks found
+.env was never read, written or opened by me. (The Expo CLI itself loads it when it starts Metro; the EXPO_PUBLIC_API_URL used
+for the device runs was passed inline.)
+
+================ after-probe.ts, run against the real limiter (same server and throwaway Redis as before.txt) ================
+A. POST /holds, same install, same seat, 11 times in a row
+   first refusal at request #11
+   what the app sees:           {"status":429,"kind":"rate_limited","retryable":true,"retryAfterSeconds":59}
+   isRateLimitedError:          true
+   classifyHoldError says:      {"kind":"rateLimited","retryAfterMs":59000,"maybeHeld":false}
+
+B. GET /movies/search, one request, with the install id
+   request headers sent: {"X-Client-Id":"5c5c5c5c-0000-4000-8000-00000000000c"}
+
+C. GET /movies/search while the address is over its limit, through SEARCH_RETRY_OPTIONS
+   (waiting for the end of the minute: now :10)
+   (waiting for the end of the minute: now :20)
+   (waiting for the end of the minute: now :30)
+   (waiting for the end of the minute: now :40)
+   (waiting for the end of the minute: now :50)
+   address saturated after 179 requests (the policy allows 180 a minute per address)
+   requests the app made, in order (ms since the search began):
+     +    1 ms  status 429  Retry-After: 5  headers {"X-Client-Id":"5c5c5c5c-0000-4000-8000-00000000000c"}
+     + 5004 ms  status 200  headers {"X-Client-Id":"5c5c5c5c-0000-4000-8000-00000000000c"}
+   the server asked for 5 s; the app asked again 5.00 s after the refusal
+   how it ended: results (3 films)
+   while it waited the screen's status was "loading" (the skeleton), never "error"
+
+Redis keys the server wrote for search (the per-install counter rl:search:u:... now exists; before.txt had only the ip keys):
+   rl:search:ip:127.0.0.1:29915755
+   rl:search:ip:127.0.0.1:29915756
+   rl:search:u:5c5c5c5c-0000-4000-8000-00000000000c:29915755
+   rl:search:u:5c5c5c5c-0000-4000-8000-00000000000c:29915756
+Redis keys the server wrote for holds:
+   rl:hold:ip:127.0.0.1:29915755
+   rl:hold:u:5c5c5c5c-0000-4000-8000-00000000000c:29915755
+
+Retry-After differs between runs (it is the time left in the limiter's window). Part C waits for the end of a clock minute, so its
+Retry-After is a few seconds; the hold's in part A is most of a minute because that window had just begun, and the app caps it at 60 s.

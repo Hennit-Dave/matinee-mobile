@@ -19,6 +19,8 @@ import { classifyHoldError, type HoldResponse } from './holds';
  *   - a request with no usable answer (network error, timeout), or a 503 from a Redis outage (a command sent just
  *     before the outage can still run later, ADR 0015),
  * and it is emptied by a confirmed hold (then `held` tracks the seats) or by a refusal the server made on purpose.
+ * A 429 is such a refusal: the rate limiter answers before the hold script runs (ADR 0016), so nothing was held.
+ * (A 503 is NOT: a command may already have been sent. The two look alike to the user and differ here.)
  * Releasing is idempotent and safe: the server only releases seats that are really ours.
  */
 
@@ -31,6 +33,7 @@ export type HoldPhase = 'idle' | 'acquiring' | 'held' | 'expired';
 export type HoldOutcome =
   | { id: number; kind: 'taken'; seatIds: string[] }
   | { id: number; kind: 'unavailable' }
+  | { id: number; kind: 'rateLimited' }
   | { id: number; kind: 'uncertain' }
   | { id: number; kind: 'rejected'; message: string };
 
@@ -59,7 +62,8 @@ export interface HoldController {
   subscribe(listener: () => void): () => void;
   /**
    * Take a hold on these seats (all or nothing). Ignored unless `idle`, so a second tap while one is in flight
-   * does nothing. After a `holds_unavailable` it waits out the server's `Retry-After` before sending.
+   * does nothing. After a `holds_unavailable` (503) or a `rate_limited` (429) it waits out the server's
+   * `Retry-After` before sending.
    */
   acquire(seatIds: readonly string[]): void;
   /** "Change seats": give the hold back at once and return to `idle`. Only meaningful while `held`. */
@@ -157,9 +161,11 @@ export function createHoldController(deps: HoldDeps): HoldController {
       }
       if (failure.kind === 'taken') refuse({ kind: 'taken', seatIds: failure.seatIds });
       else if (failure.kind === 'rejected') refuse({ kind: 'rejected', message: failure.message });
-      else if (failure.kind === 'unavailable') {
+      else if (failure.kind === 'unavailable' || failure.kind === 'rateLimited') {
+        // Both are "come back after Retry-After". They differ only in `maybeHeld` (handled above): a 503 may have
+        // left a hold behind, a 429 cannot have.
         gateUntilMono = deps.now().mono + failure.retryAfterMs;
-        refuse({ kind: 'unavailable' });
+        refuse({ kind: failure.kind });
       } else refuse({ kind: 'uncertain' });
       return;
     }

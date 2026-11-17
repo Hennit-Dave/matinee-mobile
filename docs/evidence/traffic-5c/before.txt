@@ -1,0 +1,40 @@
+BEFORE: how the app handles a 429 and what it sends on search (traffic slice 5c, mobile)
+
+App code:    matinee-mobile main at acb4855 (nothing changed yet)
+Server:      matinee-server main at 239c545 (PR #24, the rate limiter, merged), run locally with a stub movie
+             source over a throwaway Postgres 16 (54329) and Redis (6391). Dave's own Postgres, Redis, API and Metro were not touched.
+Probe:       docs/evidence/traffic-5c/before-probe.ts. It calls the app's own functions (acquireHold, classifyHoldError, fetchSearchMovies,
+             resolveMoviesViewStatus) and records the headers the app really sent. Nothing is mocked: the 429s below are the real limiter's.
+
+typecheck: clean    lint: clean    tests: 276 passed, 0 failed (the 5b suite)
+
+A. POST /holds, same install, same seat, 11 times in a row
+   first refusal at request #11
+   what the app sees:           {"status":429,"kind":"rate_limited","retryable":false,"retryAfterSeconds":12,"message":"Too many requests. Please slow down and try again shortly."}
+   classifyHoldError says:      {"kind":"rejected","message":"Too many requests. Please slow down and try again shortly.","maybeHeld":false}
+
+B. GET /movies/search, one request
+   request headers sent: null
+   (no X-Client-Id: the server can only count search by address, so the per-install search limit never applies)
+
+C. GET /movies/search until the limiter refuses (address limit 180 a minute)
+   requests admitted before the refusal: 180
+   what the app sees:                    {"status":429,"kind":"rate_limited","retryable":false,"retryAfterSeconds":6,"message":"Too many requests. Please slow down and try again shortly."}
+   screen status the search hook derives: error   (the "Search failed" EmptyState; isServerOverloadedError=false)
+
+Redis keys the server wrote for search (a request that names an install would also write rl:search:u:<install id>:<window>):
+   rl:search:ip:127.0.0.1:29915727
+Redis keys the server wrote for holds (a hold request does name the install):
+   rl:hold:ip:127.0.0.1:29915727
+   rl:hold:u:5c5c5c5c-0000-4000-8000-00000000000b:29915727
+
+READ THIS AS:
+  A. The server's 429 reaches the app as kind "rate_limited" (that string only survives because the code is cast: the ApiErrorCode
+     union does not list it), retryable=false, and classifyHoldError calls it a plain "rejected" carrying the server's sentence.
+     Nothing makes the hold flow wait out Retry-After, so the next Continue goes straight out and is refused again.
+  B. The search request carries no headers at all, so no X-Client-Id. Only the address counter exists in Redis for search, so the
+     per-install search limit (60 a minute) can never apply.
+  C. A 429 on search becomes status "error": the "Search failed" EmptyState with a manual Try again, and no automatic retry.
+
+Retry-After differs between runs (it is the time left in the limiter's window); each run starts from a flushed throwaway Redis.
+NOT SHOWN: the screens (the after run has the device screenshots), and polling (not touched by this slice).

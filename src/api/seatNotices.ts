@@ -8,8 +8,8 @@ import type { ShowtimeSeatRow } from './seats';
  * so the wording and the rules are unit-tested; the screen only shows the notice (Toast, haptic, refetch).
  *
  * The 409 "seat taken" wording follows Figma 57:7594 ("That seat was just taken. Pick another."), naming the seat
- * as the brief asks. The hold-unavailable and could-not-confirm Toasts have no Figma frame: they reuse the Toast
- * with its optional action.
+ * as the brief asks. The hold-unavailable, slow-down (429) and could-not-confirm Toasts have no Figma frame: they
+ * reuse the Toast with its optional action.
  */
 export interface SeatNoticeDraft {
   message: string;
@@ -57,6 +57,17 @@ export function holdOutcomeNotice(outcome: HoldOutcome, rows: readonly ShowtimeS
         retry: true,
         refetch: false,
       };
+    case 'rateLimited':
+      // 429. Not an error in the app's eyes, so the calm `info` tone and no buzz. The picks are kept and Try again
+      // goes through the hold flow, which waits out Retry-After before it sends (holdMachine.ts), so a tap does not
+      // simply get refused again. Nothing is held, so there is nothing to refresh either.
+      return {
+        message: RATE_LIMITED_MESSAGE,
+        tone: 'info',
+        haptic: false,
+        retry: true,
+        refetch: false,
+      };
     case 'uncertain':
       return {
         message: "Couldn't confirm your hold. Try again.",
@@ -76,6 +87,8 @@ export function holdOutcomeNotice(outcome: HoldOutcome, rows: readonly ShowtimeS
   }
 }
 
+/** Too many holds in a minute (429). No Figma frame: the existing `Toast` with its Try again action. */
+export const RATE_LIMITED_MESSAGE = 'Slow down a moment, then try again.';
 export const STALE_MAP_MESSAGE = "Can't refresh seats. Trying again…";
 export const HELD_LOCKED_MESSAGE = 'Your seats are held. Use Change seats to pick different ones.';
 /** Continue with seats held: the next chapter owns payment, so the app says so (Checkout is Figma 60:12130). */

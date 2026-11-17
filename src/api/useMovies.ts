@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { getClientId } from './clientIdNative';
 import { readApiBaseUrl } from './config';
 import {
   fetchDiscoverMovies,
@@ -16,6 +17,7 @@ import {
   type MoviesFetchResult,
   type MoviesViewStatus,
 } from './movies';
+import { SEARCH_RETRY_OPTIONS, isWaitingOnRateLimit } from './searchHelpers';
 
 const ONE_MINUTE_MS = 60_000;
 const ONE_HOUR_MS = 60 * ONE_MINUTE_MS;
@@ -110,7 +112,16 @@ export function usePopularMovies(page = 1): UseMoviesResult {
   return toUseMoviesResult(enabled, query, configError);
 }
 
-export function useSearchMovies(rawQuery: string, page = 1): UseMoviesResult {
+export interface UseSearchMoviesResult extends UseMoviesResult {
+  /**
+   * The server answered 429 and the search is waiting out `Retry-After` before asking again (traffic slice 5c). The
+   * screen shows a Toast for it; `status` stays `loading` meanwhile, so the skeleton stays and "Search failed" never
+   * appears. It goes false when the search succeeds, fails another way, or has used up its automatic retries.
+   */
+  rateLimited: boolean;
+}
+
+export function useSearchMovies(rawQuery: string, page = 1): UseSearchMoviesResult {
   const { baseUrl, configError } = safeReadBaseUrl();
   const normalised = normaliseSearchQuery(rawQuery);
   const enabled = baseUrl !== null && normalised.length > 0;
@@ -118,13 +129,22 @@ export function useSearchMovies(rawQuery: string, page = 1): UseMoviesResult {
   const query = useQuery({
     queryKey: ['movies', 'search', baseUrl, normalised, page],
     enabled,
-    retry: false,
+    // Only a 429 is retried, after its Retry-After, a few times (searchHelpers.ts). Everything else fails at once.
+    ...SEARCH_RETRY_OPTIONS,
     staleTime: ONE_MINUTE_MS,
     gcTime: ONE_HOUR_MS,
-    queryFn: ({ signal }) => fetchSearchMovies(normalised, page, signal, baseUrl!),
+    queryFn: async ({ signal }) => {
+      // Search does not need an install id, but with it the server also counts this install's own searches (the
+      // per-user limit). If the id cannot be read, search still works and only the address is counted.
+      const clientId = await getClientId().catch(() => undefined);
+      return fetchSearchMovies(normalised, page, signal, baseUrl!, clientId);
+    },
   });
 
-  return toUseMoviesResult(enabled, query, configError);
+  return {
+    ...toUseMoviesResult(enabled, query, configError),
+    rateLimited: isWaitingOnRateLimit(query),
+  };
 }
 
 export interface UseMovieDetailResult {
