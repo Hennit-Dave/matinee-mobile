@@ -10,7 +10,15 @@ import {
   isReleaseResponse,
   releaseHold,
 } from './holds';
-import { MAX_RETRY_AFTER_SECONDS, MovieApiError, fetchApiJson, isServerOverloadedError, parseRetryAfter } from './movies';
+import {
+  MAX_RETRY_AFTER_SECONDS,
+  MovieApiError,
+  fetchApiJson,
+  isRateLimitedError,
+  isServerOverloadedError,
+  parseRetryAfter,
+  retryAfterMs,
+} from './movies';
 
 const BASE = 'https://api.example.test';
 const SHOWTIME = '3f2c1b7e-6a1d-4c8e-9a52-0b1d2e3f4a5b';
@@ -270,4 +278,109 @@ test('the seat map keeps its meaning of "overloaded": any 503 still counts, a 40
   assert.equal(isServerOverloadedError(new MovieApiError('x', { status: 503, kind: 'service_unavailable' })), true);
   assert.equal(isServerOverloadedError(new MovieApiError('x', { status: 503, kind: 'holds_unavailable' })), true);
   assert.equal(isServerOverloadedError(new MovieApiError('x', { status: 404, kind: 'not_found' })), false);
+});
+
+// ---- 429 rate_limited (traffic slice 5c, ADR 0016) -------------------------------------------------
+
+test('429 rate_limited: the code, Retry-After and the retryable flag come through, and a hold is NOT held', async () => {
+  await withFetch(
+    () => json(429, errorBody('rate_limited'), { 'Retry-After': '7' }),
+    async () => {
+      const error = await acquireHold(SHOWTIME, [SEAT_A], CLIENT, undefined, BASE).then(
+        () => null,
+        (e: unknown) => e
+      );
+      assert.ok(error instanceof MovieApiError);
+      assert.equal(error.kind, 'rate_limited');
+      assert.equal(error.status, 429);
+      assert.equal(error.requestId, 'req-1');
+      assert.equal(error.retryAfterSeconds, 7);
+      assert.equal(error.retryable, true, '429 is retryable');
+      assert.equal(isRateLimitedError(error), true);
+      assert.deepEqual(classifyHoldError(error), { kind: 'rateLimited', retryAfterMs: 7000, maybeHeld: false });
+    }
+  );
+});
+
+test('a 429 is the opposite of a 503 on the one question that matters: could the seats be held?', () => {
+  // The limiter runs BEFORE the hold script (ADR 0016), so a 429 means the request was never processed.
+  // A 503 means Redis was in trouble: a command sent just before may still land (ADR 0015).
+  const limited = classifyHoldError(new MovieApiError('x', { status: 429, kind: 'rate_limited', retryAfterSeconds: 3 }));
+  const down = classifyHoldError(new MovieApiError('x', { status: 503, kind: 'holds_unavailable', retryAfterSeconds: 3 }));
+  assert.equal(limited.maybeHeld, false);
+  assert.equal(down.maybeHeld, true);
+  assert.equal(limited.kind === 'rateLimited' && limited.retryAfterMs, 3000);
+  assert.equal(down.kind === 'unavailable' && down.retryAfterMs, 3000, 'both wait out Retry-After the same way');
+});
+
+test('429 Retry-After: missing falls back to 2 s, junk is ignored, and a huge one is capped', async () => {
+  const fallback = classifyHoldError(new MovieApiError('x', { status: 429, kind: 'rate_limited' }));
+  assert.deepEqual(fallback, { kind: 'rateLimited', retryAfterMs: DEFAULT_RETRY_AFTER_MS, maybeHeld: false });
+
+  for (const [header, expectMs] of [
+    ['Wed, 21 Oct 2026 07:28:00 GMT', DEFAULT_RETRY_AFTER_MS], // an HTTP date is not what this server sends
+    ['soon', DEFAULT_RETRY_AFTER_MS],
+    ['99999', MAX_RETRY_AFTER_SECONDS * 1000],
+    ['1', 1000],
+  ] as const) {
+    await withFetch(
+      () => json(429, errorBody('rate_limited'), { 'Retry-After': header }),
+      async () => {
+        const error = await acquireHold(SHOWTIME, [SEAT_A], CLIENT, undefined, BASE).then(
+          () => null,
+          (e: unknown) => e
+        );
+        assert.ok(error instanceof MovieApiError);
+        const failure = classifyHoldError(error);
+        assert.equal(failure.kind === 'rateLimited' && failure.retryAfterMs, expectMs, `Retry-After: ${header}`);
+      }
+    );
+  }
+});
+
+test('retryAfterMs reads the error, or uses the fallback it is given', () => {
+  assert.equal(retryAfterMs(new MovieApiError('x', { status: 429, kind: 'rate_limited', retryAfterSeconds: 4 }), 9), 4000);
+  assert.equal(retryAfterMs(new MovieApiError('x', { status: 429, kind: 'rate_limited' }), 9), 9);
+});
+
+test('isRateLimitedError is true for the 429 code only', () => {
+  const kinds = [
+    'not_found',
+    'validation_failed',
+    'internal_error',
+    'service_unavailable',
+    'seat_taken',
+    'holds_unavailable',
+    'network_error',
+    'invalid_response',
+  ] as const;
+  for (const kind of kinds) assert.equal(isRateLimitedError(new MovieApiError('x', { status: 400, kind })), false, kind);
+  assert.equal(isRateLimitedError(new MovieApiError('x', { status: 429, kind: 'rate_limited' })), true);
+  for (const other of [new Error('429'), null, undefined, 'rate_limited', { kind: 'rate_limited' }]) {
+    assert.equal(isRateLimitedError(other), false);
+  }
+});
+
+test('a 429 whose body is not the server envelope is retryable but NOT called rate_limited, so a hold stays cautious', async () => {
+  // Without the envelope we cannot tell our limiter from something in front of it, so we do not claim "nothing held".
+  for (const response of [
+    () => new Response('<html>slow down</html>', { status: 429, headers: { 'Retry-After': '5' } }),
+    () => json(429, { message: 'Too Many Requests' }, { 'Retry-After': '5' }),
+  ]) {
+    await withFetch(response, async () => {
+      const error = await acquireHold(SHOWTIME, [SEAT_A], CLIENT, undefined, BASE).then(
+        () => null,
+        (e: unknown) => e
+      );
+      assert.ok(error instanceof MovieApiError);
+      assert.equal(error.status, 429);
+      assert.notEqual(error.kind, 'rate_limited');
+      assert.equal(error.retryable, true);
+      assert.deepEqual(classifyHoldError(error), { kind: 'uncertain', maybeHeld: true });
+    });
+  }
+});
+
+test('a 429 is not an "overloaded server": that state stays for 503', () => {
+  assert.equal(isServerOverloadedError(new MovieApiError('x', { status: 429, kind: 'rate_limited' })), false);
 });
