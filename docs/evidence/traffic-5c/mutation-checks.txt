@@ -1,0 +1,80 @@
+MUTATION CHECKS: can the new tests fail?  (traffic slice 5c, mobile)
+
+Each entry breaks the code in one specific way, runs the whole suite (npm test), and restores the file.
+Counts are distinct failing tests out of the 302 in the suite. Script: scratchpad only, not committed (it edits one file, runs npm test, restores it).
+CAUGHT means the suite went red and names the tests that noticed. All files are restored and the suite is re-run green at the end.
+
+M1 a 429 is classified as 'maybe held' (like a 503), so leaving would send a pointless release
+   file: src/api/holds.ts
+   CAUGHT: 6 failing test(s) of 302
+     - 429 means nothing is held: leaving sends NO release (the difference from a 503)
+     - leaving while waiting out a 429 cancels the wait and still sends no release
+     - a 429 on new seats does not forget seats an earlier unclear try may have left held
+     - 429 rate_limited: the code, Retry-After and the retryable flag come through, and a hold is NOT held
+     - a 429 is the opposite of a 503 on the one question that matters: could the seats be held?
+     - 429 Retry-After: missing falls back to 2 s, junk is ignored, and a huge one is capped
+
+M2 the hold flow does not wait out Retry-After after a 429 (only after a 503)
+   file: src/api/holdMachine.ts
+   CAUGHT: 3 failing test(s) of 302
+     - 429 rate_limited: idle with a rateLimited outcome, and the NEXT attempt waits out Retry-After before it is sent
+     - 429 without a Retry-After falls back to 2 s
+     - leaving while waiting out a 429 cancels the wait and still sends no release
+
+M3 a 429 is not marked retryable
+   file: src/api/movies.ts
+   CAUGHT: 2 failing test(s) of 302
+     - 429 rate_limited: the code, Retry-After and the retryable flag come through, and a hold is NOT held
+     - a 429 whose body is not the server envelope is retryable but NOT called rate_limited, so a hold stays cautious
+
+M4 the search wait ignores the server's Retry-After (always the 2 s fallback)
+   file: src/api/searchHelpers.ts
+   CAUGHT: 2 failing test(s) of 302
+     - the wait is the server's Retry-After, never under a second, with a fallback when there is none
+     - a 429 then success: the app waits exactly Retry-After, asks again once, and the results arrive
+
+M5 the search retry cap is off by one (one retry too many)
+   file: src/api/searchHelpers.ts
+   CAUGHT: 2 failing test(s) of 302
+     - only a 429 is retried, and only up to the cap
+     - a 429 that keeps coming: retried exactly the cap, then the error is shown (never an endless loop)
+
+M6 search retries EVERY failure, not just a 429
+   file: src/api/searchHelpers.ts
+   CAUGHT: 2 failing test(s) of 302
+     - only a 429 is retried, and only up to the cap
+     - a failure that is not a 429 is not retried: it is shown at once, as before
+
+M7 search does not send X-Client-Id
+   file: src/api/movies.ts
+   CAUGHT: 2 failing test(s) of 302
+     - search sends the install id as X-Client-Id, so the per-user search limit can apply
+     - a 429 then success: the app waits exactly Retry-After, asks again once, and the results arrive
+
+M8 search sends any non-empty id, UUID or not
+   file: src/api/movies.ts
+   CAUGHT: 1 failing test(s) of 302
+     - an install id that is not a UUID is never sent (the server answers a malformed one with a 400)
+
+M9 no minimum wait: a Retry-After of 0 retries at once
+   file: src/api/searchHelpers.ts
+   CAUGHT: 1 failing test(s) of 302
+     - the wait is the server's Retry-After, never under a second, with a fallback when there is none
+
+M10 the slow-down Toast buzzes like a lost seat
+   file: src/api/seatNotices.ts
+   CAUGHT: 1 failing test(s) of 302
+     - 429 rate_limited: "slow down a moment", calm tone, no buzz, picks kept, Try again, nothing to refresh
+
+M11 the 'waiting' flag stays on after the retries are used up (ignores isFetching)
+   file: src/api/searchHelpers.ts
+   CAUGHT: 1 failing test(s) of 302
+     - waiting on the limiter is true only while a 429 is being waited out
+
+M12 a 429 with no readable envelope is called rate_limited (so a hold would claim nothing was held)
+   file: src/api/movies.ts
+   CAUGHT: 1 failing test(s) of 302
+     - a 429 whose body is not the server envelope is retryable but NOT called rate_limited, so a hold stays cautious
+
+12 of 12 caught.
+After restoring every file: 302 tests, 302 passed, 0 failed.

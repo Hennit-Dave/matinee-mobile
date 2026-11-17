@@ -1,0 +1,92 @@
+DEVICE RUN: the 429 handling on a real screen, against the real limiter (traffic slice 5c, mobile)
+
+Where:   Android emulator Pixel_10a, Expo Go 58.0.5, Metro on its own port (8082) with EXPO_PUBLIC_API_URL passed inline
+         (http://127.0.0.1:3100 through adb reverse). The project .env was not touched.
+Server:  matinee-server main at 239c545 (PR #24 merged), run locally. It is the server's own src/api/main.ts copied into the
+         scratchpad with ONE change: the movie source is a stub, so a search can succeed without TMDB (no TMDB key was used). The
+         rate limiter, its policy table, the hold store and the routes are the real ones. Postgres 16 on 54329 and Redis on 6391,
+         both throwaway. Dave's own Postgres (5432), Redis (6379), API and Metro were not touched. The server repo stayed clean.
+How the limit is reached: with `curl` from the same machine. The emulator reaches the server through adb reverse, so it shares
+         the address 127.0.0.1 with curl: this is the "busy shared address" case (a venue's wifi, carrier-grade NAT). Each storm
+         is fired at the end of a clock minute, because the limiter's windows are aligned to the minute and a Retry-After
+         then is seconds, not nearly a minute. The app's install id in the log is 0ebcd08d-... (shortened below).
+Oracle:  the server's request log (policy and scope on every 429; userId = the X-Client-Id the request carried) and Redis.
+         Times are UTC, as the server logs them.
+
+---------------------------------------------------------------------------------------------------------------------------
+BEFORE (the code on main; screenshots before-search-failed-light.jpg, before-hold-rejected-light.jpg)
+
+  Search, address over its limit (storm of 181 requests, then "dune" typed in the app):
+    19:50:47.044  GET /movies/search  429  [policy:search scope:ip]          <- the app's request: NO userId (no X-Client-Id sent)
+    The screen shows "Search failed", the server's sentence, and a manual Try again. No retry by itself.
+
+  Hold, address over its limit (storm of 41 holds from other installs, then Continue):
+    19:51:46.252  POST /showtimes/:id/holds  429  [policy:hold scope:ip]  userId=0ebcd08d...
+    The screen shows an ERROR Toast with the server's raw sentence "Too many requests. Please slow down and try again shortly."
+    and no Try again. Nothing waits out Retry-After.
+
+---------------------------------------------------------------------------------------------------------------------------
+AFTER
+
+RUN 1: search refused, then retried by itself (01-search-slow-down-toast-light.jpg, 02-search-results-after-retry-light.jpg)
+    19:39:46.780  GET /movies/search  429  [policy:search scope:ip]  userId=0ebcd08d...    <- the app's first request
+    19:40:00.842  GET /movies/search  200  userId=0ebcd08d...                              <- the retry, 14.06 s later
+  While it waited the screen kept the skeleton list and showed the info Toast "Slow down a moment. Searching again shortly...".
+  "Search failed" never appeared. Then the 3 results rendered.
+  The userId on the refused request is the proof that X-Client-Id is now sent on search. Redis, after:
+    rl:search:ip:127.0.0.1:29915739
+    rl:search:ip:127.0.0.1:29915740
+    rl:search:u:0ebcd08d-6e37-4595-b5c2-23d7e3fcf33b:29915740      <- the per-install counter. Before this change it never existed.
+
+RUN 2: hold refused, Try again waits out Retry-After, then the hold lands (03, 04, 05 *-light.jpg)
+    19:41:46.734  POST /showtimes/:id/holds  429  [policy:hold scope:ip]  userId=0ebcd08d...
+    19:42:01.796  POST /showtimes/:id/holds  201  userId=0ebcd08d...                       <- 15.06 s after the refusal
+  Screen: info Toast "Slow down a moment, then try again." with Try again (03). I tapped Try again a few seconds after the refusal;
+  Continue showed its working state and nothing was sent (04), until 15 s had passed since the refusal; then the hold was
+  taken and the countdown ran ("9:52 left", Change seats) (05). Redis then held the key hold:{showtime}:<seat>.
+
+RUN 3: a 429 means nothing is held, so leaving sends no release (06-hold-slow-down-toast-dark.jpg, dark mode)
+  Two seats picked (the screen said "2 seats . D3, E3"), storm, Continue, then the system BACK key straight away.
+    19:45:46.667  POST /showtimes/:id/holds  429  [policy:hold scope:ip]  userId=0ebcd08d...
+    (no further request from the app: no DELETE)
+  Hold keys in Redis: 0 before, 0 after. For contrast, the real hold taken in RUN 2 WAS released when I left that screen:
+  `DELETE /showtimes/:id/holds` 200 at 19:42:52.295 (the existing "leaving releases" rule). A hold that exists needs that; a 429 leaves none.
+
+RUN 4: the retry cadence, and the cap
+  a) A search refused three times in a row, then admitted (the address was kept near its limit by a curl loop):
+    19:47:23.238  GET /movies/search  429
+    19:47:24.281  GET /movies/search  429
+    19:47:25.321  GET /movies/search  429
+    19:47:26.356  GET /movies/search  200          (about one second apart: the server's Retry-After was 1 s; the app's floor is 1 s)
+    (07-search-slow-down-toast-dark.jpg is this run, dark: the skeleton and the Toast.)
+  b) Refused every time (six curl loops hammering the address): the first request and exactly three retries, then nothing more
+     is sent and the error state appears (08-search-retries-spent-dark.jpg: "Too many searches", "Give it a moment, then try again.", Try again):
+    19:48:36.147  GET /movies/search  429
+    19:48:37.199  GET /movies/search  429
+    19:48:38.239  GET /movies/search  429
+    19:48:39.271  GET /movies/search  429          <- the 4th and last. No 5th request followed.
+
+POLLING, not touched, checked read-only (no polling file or polling test changed since main):
+    poll #1 in a row answers 429: stale-map Toast=true, screen status=ready
+    poll #2 in a row answers 429: stale-map Toast=true, screen status=ready
+    poll #3 in a row answers 429: stale-map Toast=false, screen status=error
+    first load (no map yet) answers 429: screen status=error
+  That is the existing rule (keep the map on 1-2 failed polls, error on the 3rd), run on a 429 error through the unchanged functions.
+  A poll that gets a 429 was not provoked on the device.
+
+---------------------------------------------------------------------------------------------------------------------------
+RUNS I THREW AWAY, and why
+  - First launch of the app: "Cannot find native module 'ExpoCrypto'". The emulator booted from a snapshot with an Expo Go process that
+    predates the two native modules; force-stopping Expo Go and relaunching fixed it (the same dev-only quirk 5b recorded).
+    It matters a little more now: useMovies.ts imports the install-id module, so Home, movie detail and search load expo-crypto and
+    expo-secure-store too, where before only the seat screen did. Both are in Expo Go 58.0.5 and were approved in 5b: no new build.
+  - A hold run where my tap missed the seat, so Continue stayed disabled and no request was sent: it proved nothing and is not used.
+    The runs above check that a seat is really picked before the storm fires.
+  - A search run where my curl loop had not yet reached 180 requests, so the app's first search was admitted: not used.
+
+NOT SHOWN
+  - A real phone, iOS, TalkBack/VoiceOver reading the new Toasts aloud.
+  - A real TMDB response (the movie source was a stub; the limiter and the app code were real).
+  - The real Railway edge (carry-forward 1 of the server's ADR 0016). Here the address is 127.0.0.1, so what the app calls "a shared
+    address" is exactly that, but how Railway presents client addresses is still unproven.
+  - A hold wait of the full 60 s. The longest observed here was 15 s (RUN 2); the app's cap is 60 s.
