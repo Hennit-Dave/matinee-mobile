@@ -37,3 +37,7 @@ The Search design added browsing by genre alongside text search, so I added serv
 ## Home dynamic
 
 The featured hero switches movies roughly every five seconds by fading the old poster out while the next fades in. I load the next image before starting the transition to avoid a blank flash. Auto-advance stops when Reduce Motion is enabled to respect users who are sensitive to movement, and pauses when leaving Home to avoid unnecessary background work. The Popular row handles its own loading, error, and retry states so a failure there does not hide Now Playing or the rest of Home. Although the hero cycles through five movies, it only loads details for the current and next movie, keeping the next transition ready without fetching everything upfront.
+
+## Slice 5b · Live seat holds — countdown and polling — 2026-11-17
+
+What clicked for me was that the seat map shows availability, but it does not guarantee a seat is still free. Polling keeps the display reasonably current, while the server checks on Continue and the database protects against double booking. I accepted a few seconds of delay for simpler infrastructure, then reduced unnecessary traffic by spreading polls 4–6 seconds apart and pausing them when the screen is not visible.
