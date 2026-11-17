@@ -19,6 +19,7 @@ import {
   clampTranslate,
   composeSeatingSubtitle,
   focusTranslate,
+  findLostPicks,
   findSeatPosition,
   hitTestSeat,
   initialMapView,
@@ -40,8 +41,10 @@ import {
   selectionHaptic,
   stepStop,
   summarySeatsLine,
+  takenSeatsMessage,
   toggleSeatSelection,
   visibleFraction,
+  withOwnHold,
   zoomStops,
   zoomedWindow,
   zoomedWindowHeight,
@@ -420,4 +423,58 @@ test('an unknown seat id falls back to the Overview', () => {
   const rows = room(10, 14);
   const layout = buildMapLayout(rows);
   assert.equal(initialMapView(layout, rows, 328, 0.5, 'nope').zoomed, false);
+});
+
+// ---- Holding and contention (traffic slice 5b) ----------------------------------------------------
+
+test('findLostPicks names the picks that another user took, in the order they were picked', () => {
+  const rows = room(2, 3, { 'A-2': { status: 'held' }, 'B-1': { status: 'sold' } });
+  assert.deepEqual(findLostPicks(['B-1', 'A-1', 'A-2'], rows), ['B-1', 'A-2']);
+});
+
+test('findLostPicks: nothing lost when every pick is still available, or when nothing is picked', () => {
+  const rows = room(2, 3);
+  assert.deepEqual(findLostPicks(['A-1', 'B-3'], rows), []);
+  assert.deepEqual(findLostPicks([], rows), []);
+});
+
+test('findLostPicks: a pick that is no longer in the room at all is lost too', () => {
+  assert.deepEqual(findLostPicks(['Z-9'], room(1, 3)), ['Z-9']);
+});
+
+test('withOwnHold shows the caller\'s own held seats as available, so the selection draws them as "Yours"', () => {
+  const rows = room(2, 3, { 'A-1': { status: 'held' }, 'A-2': { status: 'held' }, 'B-3': { status: 'held' } });
+  const shown = withOwnHold(rows, ['A-1', 'A-2']);
+  const status = (id: string) => shown.flatMap((r) => r.seats).find((s) => s.id === id)!.status;
+  assert.equal(status('A-1'), 'available');
+  assert.equal(status('A-2'), 'available');
+  assert.equal(status('B-3'), 'held', 'someone else\'s hold is still drawn as held');
+});
+
+test('withOwnHold never turns a SOLD seat back into an available one, and leaves available ones alone', () => {
+  const rows = room(1, 3, { 'A-1': { status: 'sold' } });
+  assert.equal(withOwnHold(rows, ['A-1', 'A-2']), rows, 'nothing to change: the same rows come back');
+  assert.equal(rows[0]!.seats[0]!.status, 'sold');
+});
+
+test('withOwnHold keeps untouched rows as the SAME objects, so the memoized map does not redraw them', () => {
+  const rows = room(3, 3, { 'B-2': { status: 'held' } });
+  const shown = withOwnHold(rows, ['B-2']);
+  assert.notEqual(shown, rows);
+  assert.equal(shown[0], rows[0]);
+  assert.notEqual(shown[1], rows[1]);
+  assert.equal(shown[2], rows[2]);
+  assert.equal(withOwnHold(rows, []), rows, 'no own seats: the same array');
+});
+
+test('withOwnHold does not change the rows it was given', () => {
+  const rows = room(1, 2, { 'A-1': { status: 'held' } });
+  withOwnHold(rows, ['A-1']);
+  assert.equal(rows[0]!.seats[0]!.status, 'held');
+});
+
+test('takenSeatsMessage names the seat (Figma 57:7594 wording), or lists several, or falls back', () => {
+  assert.equal(takenSeatsMessage(['D8']), 'Seat D8 was just taken. Pick another.');
+  assert.equal(takenSeatsMessage(['D8', 'D9']), 'Seats D8, D9 were just taken. Pick others.');
+  assert.equal(takenSeatsMessage([]), 'Some of your seats were just taken. Pick others.');
 });

@@ -213,6 +213,56 @@ export function pruneUnavailable(selected: readonly string[], rows: readonly Sho
   return kept.length === selected.length ? (selected as string[]) : kept;
 }
 
+/**
+ * Picks that the latest map says are gone: another user holds or bought the seat since it was picked (or the seat
+ * is no longer in the room). The screen drops these AND tells the user (Figma "Seat taken", 57:7594). Unlike
+ * `pruneUnavailable`, which only hides them, this is what names them. Order of `selected` is kept.
+ */
+export function findLostPicks(selected: readonly string[], rows: readonly ShowtimeSeatRow[]): string[] {
+  if (selected.length === 0) return [];
+  const available = new Set<string>();
+  for (const row of rows) {
+    for (const seat of row.seats) {
+      if (isSeatSelectable(seat)) available.add(seat.id);
+    }
+  }
+  return selected.filter((id) => !available.has(id));
+}
+
+/**
+ * The map as the caller should SEE it while they hold seats. The server marks every held seat `held`, including
+ * the caller's own, and a held seat is drawn as someone else's. The caller's own held seats are shown as
+ * available so the screen's selection draws them as "Yours" (Figma 57:9738). Only a seat the caller holds AND the
+ * server says is held is changed: a seat that has become sold stays sold.
+ *
+ * Rows with none of the caller's seats are returned as the same object, so the memoized rows of the map do not
+ * redraw (picking one seat re-renders one seat, ADR 0014; this keeps that true while holding).
+ */
+export function withOwnHold(rows: readonly ShowtimeSeatRow[], ownIds: readonly string[]): readonly ShowtimeSeatRow[] {
+  if (ownIds.length === 0) return rows;
+  const own = new Set(ownIds);
+  let changed = false;
+  const next = rows.map((row) => {
+    if (!row.seats.some((seat) => own.has(seat.id) && seat.status === 'held')) return row;
+    changed = true;
+    return {
+      ...row,
+      seats: row.seats.map((seat) => (own.has(seat.id) && seat.status === 'held' ? { ...seat, status: 'available' as const } : seat)),
+    };
+  });
+  return changed ? next : rows;
+}
+
+/**
+ * The Toast for seats that were taken before the caller could hold them (Figma 57:7594: "That seat was just
+ * taken. Pick another."). The brief asks to say WHICH seats, so one seat is named; several are listed.
+ */
+export function takenSeatsMessage(names: readonly string[]): string {
+  if (names.length === 0) return 'Some of your seats were just taken. Pick others.';
+  if (names.length === 1) return `Seat ${names[0]} was just taken. Pick another.`;
+  return `Seats ${names.join(', ')} were just taken. Pick others.`;
+}
+
 /** The picked seats' names in room order (row A first, left to right), whatever order they were picked in. */
 export function selectedSeatNames(rows: readonly ShowtimeSeatRow[], selectedIds: readonly string[]): string[] {
   if (selectedIds.length === 0) return [];

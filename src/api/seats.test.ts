@@ -5,8 +5,10 @@ import {
   NO_SEATS_MESSAGE,
   buildShowtimeSeatsUrl,
   countSeats,
+  fetchShowtimeSeats,
   isShowtimeSeatsResponse,
   isSoldOut,
+  isStaleRefresh,
   resolveSeatsViewStatus,
   type SeatStatus,
   type SeatsFetchResult,
@@ -175,4 +177,74 @@ test('a failed refresh is an error even when an earlier map is still in hand (st
 
 test('the empty-grid message is stable for the retryable error state', () => {
   assert.equal(NO_SEATS_MESSAGE, 'No seats came back for this showing.');
+});
+
+// ---- Refreshing while the map polls (traffic slice 5b) --------------------------------------------
+
+
+const READY = result(grid('available'));
+const FAILED = { ...BASE, isError: true } as const;
+const dropped = new MovieApiError('Could not reach the Matinee server.', { status: 0, kind: 'network_error' });
+
+test('POLLING TOLERANCE: one or two failed refreshes keep the last good map on screen and mark it stale', () => {
+  for (const consecutiveFailures of [1, 2]) {
+    const params = { ...FAILED, error: dropped, result: READY, consecutiveFailures };
+    assert.equal(resolveSeatsViewStatus(params), 'ready', `${consecutiveFailures} failure(s) in a row`);
+    assert.equal(isStaleRefresh(params), true);
+  }
+});
+
+test('POLLING TOLERANCE: the THIRD failure in a row is an error again, and the map is not drawn', () => {
+  const params = { ...FAILED, error: dropped, result: READY, consecutiveFailures: 3 };
+  assert.equal(resolveSeatsViewStatus(params), 'error');
+  assert.equal(isStaleRefresh(params), false);
+
+  const overloaded = new MovieApiError('busy', { status: 503, kind: 'service_unavailable' });
+  assert.equal(resolveSeatsViewStatus({ ...params, error: overloaded }), 'server_overloaded');
+});
+
+test('POLLING TOLERANCE does not apply to a one-off fetch: with no failure count, a failed refresh is an error (the old rule)', () => {
+  const params = { ...FAILED, error: dropped, result: READY };
+  assert.equal(resolveSeatsViewStatus(params), 'error');
+  assert.equal(isStaleRefresh(params), false);
+});
+
+test('POLLING TOLERANCE needs a map to keep: a failed FIRST load is an error however few failures', () => {
+  const params = { ...FAILED, error: dropped, result: undefined, consecutiveFailures: 1 };
+  assert.equal(resolveSeatsViewStatus(params), 'error');
+  assert.equal(isStaleRefresh(params), false);
+});
+
+test('POLLING TOLERANCE never hides a showing that has gone: a 404 is not_found at once', () => {
+  const gone = new MovieApiError('Not found', { status: 404, kind: 'not_found' });
+  const params = { ...FAILED, error: gone, result: READY, consecutiveFailures: 1 };
+  assert.equal(resolveSeatsViewStatus(params), 'not_found');
+  assert.equal(isStaleRefresh(params), false);
+});
+
+test('POLLING TOLERANCE keeps the right state for what was on screen: a sold-out room stays sold out', () => {
+  const params = { ...FAILED, error: dropped, result: result(grid('sold')), consecutiveFailures: 1 };
+  assert.equal(resolveSeatsViewStatus(params), 'sold_out');
+});
+
+test('a refresh that did not fail is not stale', () => {
+  assert.equal(isStaleRefresh({ isError: false, error: null, result: READY, consecutiveFailures: 0 }), false);
+});
+
+test('fetchShowtimeSeats sends X-Client-Id when it has one, and is the plain GET it always was when it has not', async () => {
+  const original = globalThis.fetch;
+  const sent: (RequestInit | undefined)[] = [];
+  globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+    sent.push(init);
+    return new Response(JSON.stringify(response(grid('available'))), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }) as typeof fetch;
+  try {
+    await fetchShowtimeSeats(SHOWTIME_ID, undefined, 'https://api.example.test', '0a11ce00-0000-4000-8000-000000000001');
+    await fetchShowtimeSeats(SHOWTIME_ID, undefined, 'https://api.example.test');
+  } finally {
+    globalThis.fetch = original;
+  }
+  assert.deepEqual(sent[0]?.headers, { 'X-Client-Id': '0a11ce00-0000-4000-8000-000000000001' });
+  assert.equal(sent[0]?.method, undefined, 'still a GET');
+  assert.equal(sent[1]?.headers, undefined, 'no header at all without an id');
 });

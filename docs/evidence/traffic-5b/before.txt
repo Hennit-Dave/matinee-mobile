@@ -1,0 +1,31 @@
+BEFORE traffic slice 5b (baseline for the seat-holds mobile slice)
+
+Captured on main at b5a6153 (PR #26 merged), Android emulator Pixel_10a in Expo Go 58.0.5, light mode,
+against a throwaway local matinee-server (main at fa7b363, which has the 5a hold routes) with a throwaway
+Postgres 16 (127.0.0.1:54329) and Redis (127.0.0.1:6391). Dave's own Postgres, Redis, Metro and API were not touched.
+Showtime: IMAX, 320 seats, GBP 18.50 per seat.
+
+What the screen does today
+  - Continue is inert. With J4 and J5 picked, pressing it shows only the Toast
+    "Checkout isn't built yet. Your seats aren't held or booked." (before-continue-toast-light.png)
+  - The footer carries "Preview only: seats aren't held or booked yet." (before-idle-light.png)
+  - No Countdown in the header, because nothing is held.
+
+What the server saw (structured request log, one line per request)
+  Screen opened, idle for 30 s (20:43:58 to 20:44:28), two seats picked, Continue pressed:
+
+    GET /showtimes/:id/seats     2 requests in total (one is my own curl at 20:42:03, one is the app's
+                                 first load at 20:43:42)
+    POST /showtimes/:id/holds    0
+    DELETE /showtimes/:id/holds  0
+    requests in the 30 s idle window: 0   -> the map never refreshes, so another user's hold or purchase
+                                             is invisible until the screen is reopened
+    hold keys in Redis (hold:*): 0 after pressing Continue
+
+  The app's request line has no userId: it sends no X-Client-Id.
+  App request line, as logged:
+  {"ts":"2026-11-16T20:43:42.350Z","level":"info","msg":"request","requestId":"32486488-bc94-4fb0-a351-23fe227c0e60","method":"GET","route":"/showtimes/:id/seats","status":200,"durationMs":33.32,"outcome":"ok"}
+
+Why this is the baseline
+  The 5b change makes Continue take a real hold, shows the countdown, polls the map, and releases on leave.
+  The after-state evidence repeats these exact measurements.

@@ -1,0 +1,58 @@
+SEAT HOLD LIFECYCLE, AS THE SERVER SAW IT (traffic slice 5b)
+
+Android emulator Pixel_10a, Expo Go 58.0.5, against a throwaway local matinee-server (main at fa7b363, the 5a hold routes),
+throwaway Postgres 16 and Redis. Times are the server's request log (UTC). "me" = this install's X-Client-Id,
+33063b10-7f80-4b1f-8306-685a8b045271. "other" = a second user driven by curl, X-Client-Id 0b0b0000-0000-4000-8000-000000000002.
+Showtime: IMAX, 320 seats. Screenshots are named in brackets.
+
+1. Continue with J4 and J5 picked (real 600 s server)
+     POST /showtimes/:id/holds  201  87 ms  21:01:01.716  userId = me
+     Redis: hold:{<showtime>}:<J4> and hold:{<showtime>}:<J5>, both owner = me, PTTL 597505 and 597493 ms (read about 2.5 s later)
+     The header shows "9:58 left" (02-held-calm-light), the seats are drawn "Yours" though the server reports them `held`.
+     As "other", GET /seats reports J4 and J5 as `held`.
+   Continue again while held: the Toast "Payment isn't built yet..." and no booking call (03). A tap on the locked map: a Toast, no request (04).
+
+2. Change seats
+     DELETE /showtimes/:id/holds  200  6 ms  21:03:16.301     Redis keys 2 -> 0; the picks stay, the map unlocks
+
+3. Contention before Continue (a poll finds it)
+     other: POST /holds J5   201   21:03:26.541
+     me:    GET  /seats      200   21:03:28.235   (a changed map is a 200; an unchanged one was a 304)
+     J5 flips to hatched, Toast "Seat J5 was just taken. Pick another.", footer recounts to "1 seat . J4" (09, 18)
+
+4. Contention at Continue (the map had not caught up): 409
+     me picks J6, other takes J6, me presses Continue before the next poll
+     me:    POST /holds {J4, J6}   409   (Toast "Seat J6 was just taken. Pick another.", the map refetches at once, J4 stays picked)
+     Redis afterwards: only other's keys; none for me (a hold is all or nothing) (08, 19)
+
+5. Redis down: holds_unavailable
+     Redis stopped 21:04:07.  POST /holds  503
+     The same request by curl:  HTTP/1.1 503   Retry-After: 2   error.code = holds_unavailable
+     message "Seat reservations are temporarily unavailable. Please try again shortly."
+     Toast "Seats are temporarily unavailable. Try again in a moment." with a Try again action; the map and the pick stay (10)
+
+6. Leaving the screen gives the seats back
+     Seat screen opened on top of the /health check screen.
+     POST /holds 201 21:05:59.095  ->  system BACK  ->  DELETE /holds 200 21:06:02.263   (lands on the health screen)
+     Redis keys 2 -> 0
+   Earlier, a Fast Refresh (an edit to the screen file) re-ran the effects: the unmount released the hold (DELETE 200 at
+   21:02:00.917) and the screen came back idle with the picks kept. That was accidental, and it shows the same path.
+
+7. The hold ends (SCRATCH server, 150 s window: urgent and expired states cannot be reached in 10 minutes of test time)
+     POST /holds 201 21:13:12.928
+       +2.7 s   calm
+       +33.3 s  "1:57 left", the filled urgent pill (05, 16)
+       +145.2 s "0:06 left" (06)
+       +150.083 s  DELETE /holds 200 at 21:15:43.011: sent by the app as the countdown reached 0
+       +153.2 s the expiry sheet "Your seats were released", seats still drawn "Yours" behind the scrim, "0:00 left" (07, 17)
+     Redis keys: 0.  "Choose seats again" returns to the picking state with the picks cleared.
+   How the scratch server was made: a copy of the server's src/api/main.ts, kept OUTSIDE the repo, with one change:
+   createRedisHoldStore(redis, { ttlMs: 150_000 }). The matinee-server working tree stayed clean. The real 600 s window was
+   observed from its start (9:58) only; I did not wait out ten minutes.
+
+What this does not cover
+   - A hold lost EARLY (for example a Redis flush) is only found when the countdown ends, or at confirm in the payments chapter
+     (seat_not_held). The map cannot say whose `held` a seat is.
+   - A killed app cannot release: its hold lingers until its TTL. Seen once: after a force-stop my own previous hold showed as
+     "held by someone else" until it expired. The 10-minute TTL is the backstop.
+   - Real Neon, Railway Redis, a real phone, iOS, TalkBack.

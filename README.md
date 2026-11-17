@@ -16,8 +16,9 @@ real screens or features yet. This README is written as the build goes.
 
 React Native + Expo · TypeScript · TanStack Query · Zustand · Reanimated · expo-secure-store · Sentry
 
-(Zustand, Reanimated, expo-secure-store and Sentry are decided but not installed yet — ADR 0006 defers
-each native module to the slice that first needs it, so Expo Go covers slice 0.)
+(Zustand and Sentry are decided but not installed yet — ADR 0006 defers each native module to the slice that
+first needs it. Reanimated, expo-haptics and, with the seat-hold slice, expo-secure-store and expo-crypto are
+installed; all four ship in Expo Go, so none of them needs an EAS build.)
 
 ## How to run locally
 
@@ -62,6 +63,32 @@ Every `EXPO_PUBLIC_*` variable is bundled into the app and readable by anyone.
 | Variable | Why it is safe to expose |
 |---|---|
 | `EXPO_PUBLIC_API_URL` | The public address of the Matinee server. Not a secret. |
+
+## Seat holds, the install id and live seats
+
+The seat screen takes a real, server-side hold on the picked seats and keeps the room live (server: ADR 0015).
+
+- **Continue** takes ONE atomic hold on the picked seats (all or none). While they are held, a countdown runs in the
+  header (10 minutes, counted from the time the server says is left), the seats are drawn as yours and the map is locked.
+  "Change seats" gives them back, and so does leaving the screen. When the time runs out a sheet says so.
+- **The map refreshes itself** about every 5 seconds while the screen is on top and the app is in the foreground, so a seat
+  someone else takes shows up before you press Continue. It pauses when the screen is covered or the app is in the
+  background, and refreshes at once on return.
+- **Fail closed:** if the server's Redis is down, new holds are refused with a retryable message and the seat map itself
+  returns an error rather than a guess. Nothing is ever shown as free that might not be.
+- **Payment is the next chapter.** With seats held, Continue says so in a Toast; the app never calls the server's booking route.
+
+**The install id.** The app makes one random UUID per install (`expo-crypto`), keeps it in `expo-secure-store`
+(Android Keystore, iOS Keychain), and sends it as `X-Client-Id`. The server treats it as the owner of a hold, so only this
+install can release or re-acquire its own seats. It is a stand-in for a user id until sign-in exists, **not
+authentication**: whoever learns the value can act as that install. It is generated on the device and is not an
+`EXPO_PUBLIC_*` variable, so nothing is added to the table above. Clearing the app's data or reinstalling makes a new id.
+
+**Running it locally** needs the 5a server (`matinee-server`, PR #23) with Redis; start both as that README says. `app.json`
+carries the `expo-secure-store` config plugin (`faceIDPermission: false`; no biometrics are used). It only affects a native
+build.
+
+Evidence and the measurements behind these claims: `docs/evidence/traffic-5b/`.
 
 ## Docs
 
