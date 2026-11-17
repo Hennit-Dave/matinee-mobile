@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ShowtimeSeat, ShowtimeSeatRow } from './seats';
-import { holdOutcomeNotice, lostPicksNotice } from './seatNotices';
+import { RATE_LIMITED_MESSAGE, holdOutcomeNotice, lostPicksNotice } from './seatNotices';
 
 function seat(row: string, number: number): ShowtimeSeat {
   return { id: `${row}-${number}`, row, number, kind: 'standard', status: 'held' };
@@ -44,6 +44,19 @@ test('503 holds_unavailable: the retryable "temporarily unavailable" notice, pic
     retry: true,
     refetch: false,
   });
+});
+
+test('429 rate_limited: "slow down a moment", calm tone, no buzz, picks kept, Try again, nothing to refresh', () => {
+  assert.deepEqual(holdOutcomeNotice({ id: 5, kind: 'rateLimited' }, rows), {
+    message: 'Slow down a moment, then try again.',
+    tone: 'info',
+    haptic: false,
+    retry: true,
+    refetch: false,
+  });
+  assert.equal(RATE_LIMITED_MESSAGE, 'Slow down a moment, then try again.');
+  // Nothing about the map changed (nothing was held), so it needs no refresh, with or without a map on screen.
+  assert.equal(holdOutcomeNotice({ id: 5, kind: 'rateLimited' }, undefined).refetch, false);
 });
 
 test('no usable answer: says it could not confirm, and offers Try again (safe: the server treats a repeat as the same hold)', () => {
