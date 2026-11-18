@@ -147,7 +147,8 @@ Checkout uses the **native Stripe PaymentSheet** (server: ADR 0019), then polls 
 - **PaymentSheet success is not a booking.** The server confirms only on its verified Stripe webhook, so the app polls
   `GET /orders/:reference` until the order resolves: `succeeded` → the ticket; `refunded` (the hold lapsed) → "your seats were
   released, payment refunded"; `failed` → "payment didn't go through"; and a sensible timeout → "still confirming" with a re-check.
-- **The ticket** shows the movie, cinema, showtime, seats, the reference and a QR code (the QR lands in the next PR).
+- **The ticket** shows the movie, cinema, showtime, seats, the reference, the server-formatted total, and a **QR code**
+  that encodes the reference (non-sensitive). Dark mode, accessibility labels and ≥48×48 touch targets throughout.
 - **This needs an EAS dev build** — `@stripe/stripe-react-native` is a native module and does not run in Expo Go:
   ```
   eas login
