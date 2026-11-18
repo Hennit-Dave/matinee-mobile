@@ -1,11 +1,10 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { isWaitingRoomRequiredError } from '../../../api/movies';
 import {
   HELD_LOCKED_MESSAGE,
-  PAYMENT_DEFERRED_MESSAGE,
   STALE_MAP_MESSAGE,
   holdOutcomeNotice,
   lostPicksNotice,
@@ -259,12 +258,21 @@ export default function SeatSelectionScreen() {
 
   const onContinue = useCallback(() => {
     if (hold.phase === 'held') {
-      // The seats ARE held. Payment is the next chapter, so say that instead of going anywhere.
-      toast.show({ message: PAYMENT_DEFERRED_MESSAGE, tone: 'info', bottomOffset: toastOffset });
+      // The seats ARE held: open checkout as a MODAL over this screen, so the hold survives. Payment itself is
+      // the payments chapter; the seat screen only hands over the showtime and the held seats.
+      router.push({
+        pathname: '/showtime/[id]/checkout',
+        params: {
+          id: showtimeId,
+          seats: JSON.stringify(hold.seatIds),
+          ...(title ? { title } : {}),
+          ...(showing ? { showing } : {}),
+        },
+      } as unknown as Href);
       return;
     }
     controller.acquire(selectedIds);
-  }, [hold.phase, controller, selectedIds, toast, toastOffset]);
+  }, [hold.phase, controller, selectedIds, router, showtimeId, hold.seatIds, title, showing]);
 
   const onChangeSeats = useCallback(() => {
     controller.release(); // gives the seats back; the picks stay, so they can be adjusted
