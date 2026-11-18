@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHaptics, type HapticBackend } from './hapticsCore';
 
-type Call = 'selection' | 'impactLight' | 'warning';
+type Call = 'selection' | 'impactLight' | 'warning' | 'success';
 
 /** A backend that records what was asked of it. */
 function recordingBackend(): { backend: HapticBackend; calls: Call[] } {
@@ -19,11 +19,14 @@ function recordingBackend(): { backend: HapticBackend; calls: Call[] } {
       warning: () => {
         calls.push('warning');
       },
+      success: () => {
+        calls.push('success');
+      },
     },
   };
 }
 
-const EFFECTS: readonly Call[] = ['selection', 'impactLight', 'warning'];
+const EFFECTS: readonly Call[] = ['selection', 'impactLight', 'warning', 'success'];
 
 test('each wrapper asks the backend for its own haptic, once, and nothing else', () => {
   for (const effect of EFFECTS) {
@@ -45,7 +48,7 @@ test('a backend that throws never reaches the caller', () => {
   const boom = () => {
     throw new Error('haptics exploded');
   };
-  const haptics = createHaptics({ selection: boom, impactLight: boom, warning: boom });
+  const haptics = createHaptics({ selection: boom, impactLight: boom, warning: boom, success: boom });
   for (const effect of EFFECTS) assert.doesNotThrow(() => haptics[effect]());
 });
 
@@ -55,7 +58,7 @@ test('a rejected promise (how expo-haptics reports a missing native module) is s
   process.on('unhandledRejection', listener);
   try {
     const reject = () => Promise.reject(new Error('Haptics.selectionAsync is not available'));
-    const haptics = createHaptics({ selection: reject, impactLight: reject, warning: reject });
+    const haptics = createHaptics({ selection: reject, impactLight: reject, warning: reject, success: reject });
     for (const effect of EFFECTS) haptics[effect]();
     // Give the runtime a few turns to report any rejection that nobody handled.
     await new Promise((resolve) => setImmediate(resolve));
@@ -68,7 +71,7 @@ test('a rejected promise (how expo-haptics reports a missing native module) is s
 
 test('callers never get a promise back, so they cannot await it or forget to catch it', () => {
   const slow = () => new Promise<void>((resolve) => setTimeout(resolve, 1));
-  const haptics = createHaptics({ selection: slow, impactLight: slow, warning: slow });
+  const haptics = createHaptics({ selection: slow, impactLight: slow, warning: slow, success: slow });
   for (const effect of EFFECTS) assert.equal(haptics[effect](), undefined);
 });
 
@@ -88,6 +91,7 @@ test('the backend keeps its own `this`', () => {
     },
     impactLight() {},
     warning() {},
+    success() {},
   };
   const haptics = createHaptics(backend);
   haptics.selection();
