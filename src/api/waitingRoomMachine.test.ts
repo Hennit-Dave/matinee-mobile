@@ -405,6 +405,22 @@ test('a failure that is not an API error at all is treated as no answer', async 
   assert.equal(h.controller.getState().phase, 'waiting');
 });
 
+test('a request that timed out (an AbortError) is no answer like any other: kept quiet twice, then shown', async () => {
+  const timedOut = () => Object.assign(new Error('aborted'), { name: 'AbortError' });
+  const h = harness();
+  await waitInLine(h, 12);
+  h.advance(3_000);
+  await h.fail('poll', timedOut());
+  assert.equal(h.controller.getState().phase, 'waiting');
+  assert.equal(h.controller.getState().stale, true);
+  h.advance(FAILURE_RETRY_MS);
+  await h.fail('poll', timedOut());
+  assert.equal(h.controller.getState().phase, 'waiting');
+  h.advance(FAILURE_RETRY_MS);
+  await h.fail('poll', timedOut());
+  assert.equal(h.controller.getState().phase, 'failed', 'the third in a row is shown, so a hung connection cannot leave a stale number up for ever');
+});
+
 // ---- Things the server refuses on purpose ---------------------------------------------------------
 
 test('a showing that does not exist is shown at once, with no retry scheduled', async () => {

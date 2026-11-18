@@ -2,7 +2,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { getClientId } from './clientIdNative';
 import { readClock } from './holdClock';
 import { requireBaseUrl } from './requireBaseUrl';
-import { joinQueue, leaveQueue, pollQueue } from './waitingRoom';
+import { joinQueue, leaveQueue, pollQueue, withRequestTimeout } from './waitingRoom';
 import {
   createWaitingRoomController,
   type WaitingRoomController,
@@ -41,9 +41,10 @@ export function useWaitingRoom(showtimeId: string, { enabled, active }: UseWaiti
   const controller = useMemo(
     () =>
       createWaitingRoomController({
-        join: async () => joinQueue(showtimeId, await getClientId(), undefined, requireBaseUrl()),
-        poll: async () => pollQueue(showtimeId, await getClientId(), undefined, requireBaseUrl()),
-        leave: async () => leaveQueue(showtimeId, await getClientId(), undefined, requireBaseUrl()),
+        // Every call has a timeout: fetch has none, and a poll that hangs would never count as a failure (waitingRoom.ts).
+        join: async () => withRequestTimeout(async (signal) => joinQueue(showtimeId, await getClientId(), signal, requireBaseUrl())),
+        poll: async () => withRequestTimeout(async (signal) => pollQueue(showtimeId, await getClientId(), signal, requireBaseUrl())),
+        leave: async () => withRequestTimeout(async (signal) => leaveQueue(showtimeId, await getClientId(), signal, requireBaseUrl())),
         now: readClock,
         schedule: (callback, delayMs) => {
           const timer = setTimeout(callback, delayMs);

@@ -22,6 +22,8 @@ import {
   leaveQueue,
   pollQueue,
   queuePollDelayMs,
+  QUEUE_REQUEST_TIMEOUT_MS,
+  withRequestTimeout,
 } from './waitingRoom';
 
 const BASE = 'https://api.example.test';
@@ -353,4 +355,74 @@ test('the server number is bounded before the jitter: never faster than 1 s, nev
 test('two people with the same server number do not ask at the same moment', () => {
   const delays = new Set([0.05, 0.3, 0.55, 0.8, 0.95].map((draw) => queuePollDelayMs(3_000, draw)));
   assert.equal(delays.size, 5);
+});
+
+// ---- A request that never answers -----------------------------------------------------------------
+
+/** A `fetch` that never answers unless it is aborted, like a socket that died with no notice. */
+function hangingFetch(): typeof fetch {
+  return ((_input: unknown, init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    })) as typeof fetch;
+}
+
+test('a poll that is never answered fails once its time is up, instead of hanging for ever', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = hangingFetch();
+  try {
+    const startedAt = Date.now();
+    await assert.rejects(
+      () => withRequestTimeout((signal) => pollQueue(SHOWTIME, CLIENT, signal, BASE), 30),
+      (err: unknown) => err instanceof Error && err.name === 'AbortError'
+    );
+    assert.ok(Date.now() - startedAt < 5_000, 'it gave up on its own');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('an answer that arrives in time is returned, and the timer does not fire afterwards', async () => {
+  const original = globalThis.fetch;
+  let aborted = false;
+  globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+    init?.signal?.addEventListener('abort', () => {
+      aborted = true;
+    });
+    return json(200, { status: 'waiting', ahead: 3, pollAfterMs: 3_000 });
+  }) as typeof fetch;
+  try {
+    const state = await withRequestTimeout((signal) => pollQueue(SHOWTIME, CLIENT, signal, BASE), 20);
+    assert.deepEqual(state, { status: 'waiting', ahead: 3, pollAfterMs: 3_000 });
+    // Wait for the moment the timeout WOULD have fired, by waiting on a timer longer than it.
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.equal(aborted, false, 'the timer was cleared with the request');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('the timeout is generous enough for the slowest honest answer and short enough that three failures fit inside the 90 s a place is kept', () => {
+  assert.equal(QUEUE_REQUEST_TIMEOUT_MS, 10_000);
+  // Three timeouts and the two quiet waits between them: 3 x 10 s + 2 x ~2.4 s = under 35 s, well inside 90 s.
+  assert.ok(3 * QUEUE_REQUEST_TIMEOUT_MS + 2 * 2_400 < 90_000);
+});
+
+test('a join, a poll and a leave all pass the signal on to fetch', async () => {
+  const original = globalThis.fetch;
+  const signals: (AbortSignal | undefined)[] = [];
+  globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+    signals.push(init?.signal ?? undefined);
+    return json(200, { status: 'not_queued' });
+  }) as typeof fetch;
+  try {
+    const controller = new AbortController();
+    await joinQueue(SHOWTIME, CLIENT, controller.signal, BASE);
+    await pollQueue(SHOWTIME, CLIENT, controller.signal, BASE);
+    await leaveQueue(SHOWTIME, CLIENT, controller.signal, BASE);
+    assert.equal(signals.length, 3);
+    for (const signal of signals) assert.equal(signal, controller.signal);
+  } finally {
+    globalThis.fetch = original;
+  }
 });

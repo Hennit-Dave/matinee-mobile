@@ -162,3 +162,32 @@ export function queuePollDelayMs(pollAfterMs: number, random: number): number {
   const spread = base * QUEUE_POLL_JITTER;
   return Math.round(base - spread + clamped * 2 * spread);
 }
+
+// ---- A request that never answers ---------------------------------------------------------------------
+
+/**
+ * React Native's `fetch` has NO timeout: on a phone that changes network mid-request, a call can hang for minutes. The
+ * waiting room cannot live with that, because "keep the place through two failed polls" only works if a poll that is
+ * not answered FAILS. A place also lapses after 90 s of silence on the server, so a poll that hangs without failing would
+ * let a person watch a number that stopped being true. Ten seconds is longer than any answer this server gives (the
+ * slowest are a few hundred milliseconds under load) and short enough that three failures in a row still come well
+ * inside the 90 s the place is kept.
+ */
+export const QUEUE_REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * Runs `run` with a signal that aborts after `timeoutMs`. The abort makes `fetch` reject with an `AbortError`, which the
+ * queue machine counts as a failed try like any other (no answer). The timer is always cleared.
+ */
+export async function withRequestTimeout<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number = QUEUE_REQUEST_TIMEOUT_MS
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await run(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
