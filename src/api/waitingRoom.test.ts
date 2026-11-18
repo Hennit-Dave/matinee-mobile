@@ -372,11 +372,20 @@ test('a poll that is never answered fails once its time is up, instead of hangin
   globalThis.fetch = hangingFetch();
   try {
     const startedAt = Date.now();
-    await assert.rejects(
-      () => withRequestTimeout((signal) => pollQueue(SHOWTIME, CLIENT, signal, BASE), 30),
-      (err: unknown) => err instanceof Error && err.name === 'AbortError'
-    );
-    assert.ok(Date.now() - startedAt < 5_000, 'it gave up on its own');
+    // Raced against a deadline, so a timeout that never fires fails this test loudly instead of hanging the whole run.
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    const stillHanging = new Promise<never>((_resolve, reject) => {
+      deadline = setTimeout(() => reject(new Error('still hanging: the timeout never aborted the request')), 2_000);
+    });
+    try {
+      await assert.rejects(
+        () => Promise.race([withRequestTimeout((signal) => pollQueue(SHOWTIME, CLIENT, signal, BASE), 30), stillHanging]),
+        (err: unknown) => err instanceof Error && err.name === 'AbortError'
+      );
+    } finally {
+      clearTimeout(deadline);
+    }
+    assert.ok(Date.now() - startedAt < 2_000, 'it gave up on its own');
   } finally {
     globalThis.fetch = original;
   }

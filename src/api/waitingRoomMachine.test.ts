@@ -557,6 +557,26 @@ test('a busy answer to a POLL in a line is kept quiet twice, waiting out Retry-A
   assert.equal(h.controller.getState().ahead, 4);
 });
 
+test('"Try again now" after a busy POLL asks about the place; it does not join again, which would lose it', async () => {
+  const h = harness();
+  await waitInLine(h, 12);
+  h.advance(3_000);
+  await h.fail('poll', busy(11));
+  h.advance(11_000);
+  await h.fail('poll', busy(11));
+  h.advance(11_000);
+  await h.fail('poll', busy(11));
+  assert.equal(h.controller.getState().phase, 'busy');
+  assert.equal(h.calls.poll, 3);
+
+  h.controller.retry();
+  assert.equal(h.calls.poll, 4, 'a poll: the place is still ours');
+  assert.equal(h.calls.join, 1, 'and no second join');
+  await h.answer('poll', waiting(4));
+  assert.equal(h.controller.getState().phase, 'waiting');
+  assert.equal(h.controller.getState().ahead, 4);
+});
+
 test('a busy screen keeps its countdown through a spell in the background: only what is left is waited', async () => {
   const h = harness();
   h.controller.start();
