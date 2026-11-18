@@ -111,6 +111,29 @@ a `429 rate_limited` with a `Retry-After` in seconds, and the app waits that lon
 
 Evidence: `docs/evidence/traffic-5c/`.
 
+## The waiting room, the busy screen and the seat cap
+
+When a showing is busy the server lets a few people choose seats at a time and queues the rest (server: ADR 0017); it also caps how many seats one
+install can hold (ADR 0018). The seat screen is built around that.
+
+- **The line comes first.** Opening a showing joins its queue. With room, the person is let straight in and sees nothing of it. Otherwise the screen shows how
+  many people are ahead of them, and the seat map loads only once they are let in. **Position only, never a time**: the line's speed is not known well enough
+  to promise one. The app asks about its place at the pace the server sets (3 s at the front, up to 15 s at the back), a little randomised so a crowd does not
+  ask in step; it asks for nothing while the app is in the background and asks at once on return. **Leave the queue**, back and swipe all give the place back.
+- **Being let in** earns a success pulse and a short "Your turn" Toast. The note on the waiting screen says "Keep Matinee open": push notifications are a later
+  enhancement, so the app does not promise what it cannot send (Figma's frame does; this is a deliberate difference).
+- **Nothing breaks if the pass is lost.** The seat-map polls are the pass's heartbeat. If it lapses (a long spell in the background, a stretch when the server was
+  too busy to answer), the next refused request makes the screen join again by itself, and Continue is retried once it is back. A line that is no longer empty
+  sends the person to the waiting screen.
+- **Two failed polls are kept quiet.** The last place stays on screen, marked "Trying to update...", and the third failure is shown. Every call has a 10 s timeout,
+  because React Native's `fetch` has none and a poll that hangs would never count as a failure.
+- **"We're very busy right now"** (Figma `107:15558`) replaces the waiting screen or the seat map when the server is overloaded, counts down to the server's `Retry-After`
+  and tries again by itself; **Try again now** does not wait. It is for the booking funnel only. Home, Search and a film's detail keep the plain error state.
+- **The seat cap.** A refused hold says "You can hold up to 8 seats for one showing.", with the number taken from the server's answer.
+
+The server's default of 2 people inside at once is a demo setting: `WAITING_ROOM_MAX_ACTIVE` must be raised for production (server ADR 0017).
+Evidence: `docs/evidence/traffic-5d/`.
+
 ## Docs
 
 - `AGENTS.md` — how AI agents work in this repo

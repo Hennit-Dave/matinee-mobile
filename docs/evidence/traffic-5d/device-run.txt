@@ -1,0 +1,97 @@
+DEVICE RUN: the waiting room, the busy screen and the hold cap on a real device (traffic slice 5d, mobile)
+
+Device:   Android emulator Pixel_10a (API 37), Expo Go 58.0.5, this branch served by Metro on 8082.
+Server:   matinee-server main at 0f4f92f (PRs #25 and #26), run locally with a stub movie source over a throwaway Postgres 16 (54329) and Redis (6391).
+          Room for ONE active user, one admission every 2 s (WAITING_ROOM_MAX_ACTIVE=1, WAITING_ROOM_ADMIT_PER_MINUTE=30), load shedding at 3 requests
+          in flight (MAX_IN_FLIGHT=3). Dave's own Postgres, Redis, API and Metro were not touched.
+Oracle:   the server's request log (route, status and the install id the app sent in X-Client-Id). Times are UTC. The emulator's own clock runs about
+          6.4 s behind the host, so only the server's times are used below.
+Install:  5f3ea86e-1aa9-414e-9dbe-080d6d91c2b6 (the app's id). Other ids are the synthetic installs of demo-fill.sh or the probe.
+Shots:    numbered as in README.md. Every screen was reached by deep link, with a film title and a showing in the link where noted.
+
+1. Let straight in, and a re-join nobody sees (01, 02)
+   The room is empty: POST /queue -> admitted, the seat map loads. Then the SERVER was restarted, which wipes the room's Redis state under the open screen:
+     02:36:33.955  GET  /showtimes/:id/seats  403 waiting_room_required      (the heartbeat poll, pass gone)
+     02:36:34.256  POST /showtimes/:id/queue  200 admitted                    (the app joined again by itself, 301 ms later)
+     02:36:39.037  GET  /showtimes/:id/seats  304                             (polling carries on)
+   02 is the screen a few seconds later: the same seat map, no Toast, no flash. Before this PR the same 403 left "Couldn't load seats" for good.
+
+2. Waiting in a line of 11 (03, 04, 05, 06)
+   demo-fill.sh joined 12 synthetic installs (1 inside, 11 waiting); the app opened the showing behind them and shows "11 people ahead of you".
+   The server's poll answers carry pollAfterMs 3000; the app's polls were 3.4, 3.0, 3.2 s apart (02:38:12.7, :16.1, :19.1, :22.3), inside 3 s +/- 20%.
+   Dark (04) and dark with the system text at 1.3x (05) match Figma 56:6586 and 56:6708: the numeral stays at 64 and the note wraps to three lines in both.
+   Figma's own 1.3x frame does the same.
+
+3. Background and foreground (the pause rule)
+   Last poll before the app went to the background 02:41:39.1; Home pressed 02:41:40.2; NO queue request for the next 25 s; back to the foreground 02:42:05.3;
+   the next poll 02:42:08.3. A second run measured 1.71 s from the foreground command (including the adb round trip and the OS waking the app) to the request,
+   against a 2.4 to 3.6 s wait if the timer had simply carried on.
+
+4. Leave the queue (button)
+     02:42:51.356  GET    /queue 304       (last poll)
+     02:42:52.313  DELETE /queue 200       (the tap), polling stopped, the app went back to the screen under it
+   System back from the ROOT screen (a deep link with nothing beneath it) exits to the launcher without unmounting the screen, so no DELETE is sent; the
+   pass then lapses by itself 30 s after the last heartbeat. That is the server's safety net working, and is why a deep link opened ON TOP of another screen
+   was used for the runs where "back" had to leave the queue.
+
+5. Let in after waiting: "You're next", then the turn (06, 07)
+   5 synthetic installs (room for 1) and the app joined behind 3 of them:
+     02:43:29.763  POST  /queue 200 queued, ahead 3
+     02:43:32.8 / :35.3 / :38.2 / :41.6   GET /queue (ahead 2, 1, then 0: 06 is "You're next", a state Figma has no frame for)
+     02:43:44.713  GET   /queue 200 admitted
+     02:43:45.267  GET   /showtimes/:id/seats 304       (the first heartbeat, 0.55 s after admission; the server gives 15 s to claim a slot)
+   07: the seat map's skeleton and the "Your turn" Toast, above the footer, not over Continue. A repeat without any screenshot burst: admitted 02:45:55.621,
+   first seat request 02:45:55.918 (0.3 s). The haptic (success pulse) cannot be felt or logged on an emulator; it is the tested haptics.success() wrapper.
+   NOT a regression: on this emulator in a dev build the FIRST seat-map response takes about 7 s to reach JavaScript (the server answered in 12 to 24 ms).
+   Measured on main (f54503c, no waiting room, same server with the room off): fetch start to done 6.9 s; with this PR 7.4 s. The map is on screen 7 to 10 s
+   after the screen opens either way. The server sees the request at once, so the claim window is not at risk.
+
+6. Overload (09, 10, 11, 12): the server saturated
+   Real load shedding. Three searches that never answer (a stub source in MY scratch copy of main.ts, not in the server repo) hold all 3 in-flight slots, so every
+   other request is answered 503 server_busy with a Retry-After of 5 to 15 s (log: load_shed inFlight 3 maxInFlight 3).
+   a. The showing is opened while saturated: the JOIN is refused. 09: the busy screen at once, "Trying again in 0:03". When the countdown ended the app tried
+      again by itself, was refused again, and started a new countdown from the new Retry-After (10: 0:12). The server was then let go:
+        02:56:40.339  POST /queue 200   (the next automatic try joined the line, no tap), 11: "11 people ahead of you"
+   b. Already waiting, then saturated (08, 12): the first refused poll KEPT the place and marked it out of date ("Trying to update..." instead of "Updated just now").
+      The second was kept too. The third was the busy screen (12, 2 s left on its countdown). The server was let go at 02:57:50; the app polled (GET, not a new
+      POST: the place was still ours) at 02:57:56 and showed the line again.
+   Failure counts, not timing, decide when it is shown: kept quietly twice, shown the third time (the same rule as the seat map's three failed refreshes).
+
+7. Overload on the seat map (13, 14)
+   Admitted, map on screen, then saturated 02:58:56: the first refused refresh KEPT the map and showed the existing "Can't refresh seats. Trying again..." Toast (13);
+   the third became the busy screen INSIDE the seat screen, header kept, "Trying again in 0:05" (14).
+
+8. A pass lost while the server was busy, and a bug this found (15)
+   While saturated the heartbeat polls were refused, so the pass lapsed (no heartbeat for more than 30 s). After release (02:59:35):
+     02:59:41.855  GET  /seats  403    (the countdown's retry: first request after the busy screen, pass gone)
+     02:59:43.166  POST /queue  200    (re-joined, 1.3 s later)
+   and then NO further seat requests: the screen sat on "Couldn't load seats / Join the waiting room before choosing seats for this showing." The re-join worked
+   but the map was never asked for again (polling had already stopped after three failures), and the 403 was drawn as an error. FIXED in b4cbbd0: every admission
+   after the first refetches the map, and a 403 for a person the room has let in is drawn as the loading state (quietRejoinStatus, unit-tested). Repeat run:
+     03:01:32 saturated ... 03:02:25 released
+     03:02:28.467  GET  /seats  403
+     03:02:29.236  POST /queue  200
+     03:02:31.981  GET  /seats  304    (the map asked for again at once; the screen is the seat map again: 15)
+     03:02:39.9 / :45.6                (polling resumed)
+
+9. The hold cap (16)
+   8 seats were held under the app's own install id with curl (J5 to J12); in the app one more seat (A3) was picked and Continue pressed:
+     03:03:36.247  POST /holds  409 hold_limit_reached   {scope owner, limit 8, held 8}
+   The Toast: "You can hold up to 8 seats for one showing." The 8 is the server's number, the pick is kept, and there is no Try again.
+
+10. Continue finds the pass gone (17)
+   The 8 seats were released, then the pass was deleted server-side in the same command as the Continue tap, before the next poll could notice:
+     03:04:01.888  DELETE /queue  200   (curl: the pass is gone)
+     03:04:02.208  POST   /holds  403   (Continue)
+     03:04:02.268  POST   /queue  200   (the app joined again, 60 ms later)
+     03:04:02.335  GET    /seats  200   (the map asked for again)
+     03:04:02.337  POST   /holds  201   (the hold, taken again by itself)
+   17: A3 held, the 9:57 countdown running, "Change seats". No Toast, nothing to tap: about 130 ms end to end.
+
+11. Gallery (18, 19, 20)
+   WaitingRoomView in the component gallery: "You're next", the stale freshness line, and the skeleton (bars sized as sums of tokens from Figma 56:6691).
+
+Not done on the device:
+   - Dark mode of the busy screen (107:15536), and the waiting-room skeleton on a real join (a join answers in 10 to 80 ms; the gallery shows it).
+   - Haptics, which an emulator cannot show.
+   - iOS: the app ships on Android; nothing here is Android-specific except the system back from the root, noted in 4.
