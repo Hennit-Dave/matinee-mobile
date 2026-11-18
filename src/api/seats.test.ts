@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { MovieApiError } from './movies';
 import {
+  quietRejoinStatus,
   NO_SEATS_MESSAGE,
   buildShowtimeSeatsUrl,
   countSeats,
@@ -247,4 +248,31 @@ test('fetchShowtimeSeats sends X-Client-Id when it has one, and is the plain GET
   assert.deepEqual(sent[0]?.headers, { 'X-Client-Id': '0a11ce00-0000-4000-8000-000000000001' });
   assert.equal(sent[0]?.method, undefined, 'still a GET');
   assert.equal(sent[1]?.headers, undefined, 'no header at all without an id');
+});
+
+// ---- A lapsed pass is joined again quietly (traffic slice 5d) ---------------------------------------
+
+test('a 403 from the seat map is shown as loading while the screen joins again, not as an error', () => {
+  const lapsed = new MovieApiError('Join the waiting room before choosing seats for this showing.', {
+    status: 403,
+    kind: 'waiting_room_required',
+  });
+  assert.equal(quietRejoinStatus('error', lapsed), 'loading');
+});
+
+test('every other status and every other error is left as it was', () => {
+  const lapsed = new MovieApiError('x', { status: 403, kind: 'waiting_room_required' });
+  for (const status of ['loading', 'ready', 'sold_out', 'server_overloaded', 'not_found'] as const) {
+    assert.equal(quietRejoinStatus(status, lapsed), status, status);
+  }
+  for (const other of [
+    new MovieApiError('x', { status: 500, kind: 'internal_error' }),
+    new MovieApiError('x', { status: 429, kind: 'rate_limited' }),
+    new MovieApiError('x', { status: 0, kind: 'network_error' }),
+    new Error('plain'),
+    null,
+    undefined,
+  ]) {
+    assert.equal(quietRejoinStatus('error', other), 'error');
+  }
 });

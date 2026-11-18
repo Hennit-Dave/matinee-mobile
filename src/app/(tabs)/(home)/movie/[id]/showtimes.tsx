@@ -19,6 +19,7 @@ import {
   Text,
   useNavBarClearance,
 } from '../../../../../components';
+import { composeSeatingSubtitle } from '../../../../../components/seatMapLogic';
 import { useTheme } from '../../../../../theme';
 import { primitives } from '../../../../../tokens/tokens';
 
@@ -180,8 +181,15 @@ export default function ShowtimesScreen() {
                               onPress={() =>
                                 router.push({
                                   pathname: '/showtime/[id]/seats',
-                                  // The title is display-only: the seats screen shows it in its header.
-                                  params: { id: slot.id, ...(params.title ? { title: params.title } : {}) },
+                                  // The title and the showing are display-only: the seats screen shows them in its header,
+                                  // and the waiting room shows them before the seat map (which carries them) has loaded.
+                                  params: {
+                                    id: slot.id,
+                                    ...(params.title ? { title: params.title } : {}),
+                                    ...(selectedDate
+                                      ? { showing: composeSeatingSubtitle({ startsAt: selectedDate, time: slot.time, format: group.format }) }
+                                      : {}),
+                                  },
                                 } as unknown as Href)
                               }
                             />

@@ -1,6 +1,6 @@
 import { clientIdHeaders } from './clientId';
 import { readApiBaseUrl } from './config';
-import { MovieApiError, fetchApiJson, isServerOverloadedError, type CacheStatus } from './movies';
+import { MovieApiError, fetchApiJson, isServerOverloadedError, isWaitingRoomRequiredError, type CacheStatus } from './movies';
 import { POLL_FAILURES_BEFORE_ERROR } from './seatsPolling';
 
 /**
@@ -168,6 +168,16 @@ export function isSoldOut(rows: readonly ShowtimeSeatRow[]): boolean {
 export const NO_SEATS_MESSAGE = 'No seats came back for this showing.';
 
 export type SeatsViewStatus = 'loading' | 'ready' | 'sold_out' | 'server_overloaded' | 'not_found' | 'error';
+
+/**
+ * A 403 `waiting_room_required` from the seat map, for a person the room has already let in, means the pass lapsed (a long
+ * spell in the background, or a stretch when the server was too busy to answer the polls that keep it alive) and the screen
+ * is joining again by itself (ADR 0017). That is not an error to show: the screen shows its loading state for the second or
+ * two the re-join takes, and the map comes back when it is let in. Any other error is shown as it always was.
+ */
+export function quietRejoinStatus(status: SeatsViewStatus, error: unknown): SeatsViewStatus {
+  return status === 'error' && isWaitingRoomRequiredError(error) ? 'loading' : status;
+}
 
 /** A refresh failed, but the map from the last good one is still on screen. Used by the screen to say so. */
 export function isStaleRefresh(params: {

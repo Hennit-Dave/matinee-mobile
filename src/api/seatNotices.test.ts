@@ -2,7 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ShowtimeSeat, ShowtimeSeatRow } from './seats';
 import type { HoldOutcome } from './holdMachine';
-import { BUSY_MESSAGE, RATE_LIMITED_MESSAGE, holdLimitMessage, holdOutcomeNotice, lostPicksNotice } from './seatNotices';
+import {
+  BUSY_MESSAGE,
+  RATE_LIMITED_MESSAGE,
+  YOUR_TURN_MESSAGE,
+  holdLimitMessage,
+  holdOutcomeNotice,
+  lostPicksNotice,
+  yourTurnNotice,
+} from './seatNotices';
 
 function seat(row: string, number: number): ShowtimeSeat {
   return { id: `${row}-${number}`, row, number, kind: 'standard', status: 'held' };
@@ -119,4 +127,30 @@ test('hold_limit_reached at the address cap talks about the connection, not abou
   const message = holdLimitMessage({ scope: 'address', limit: 16, held: 16 });
   assert.equal(message, 'Too many seats are held from this connection for one showing.');
   assert.ok(!message.includes('16'), 'the address cap is not the number a person can act on');
+});
+
+test('being let in after waiting: a short success Toast with its own pulse (not the warning buzz), nothing to retry or refresh', () => {
+  assert.deepEqual(yourTurnNotice(), {
+    message: 'Your turn',
+    tone: 'success',
+    haptic: false,
+    success: true,
+    retry: false,
+    refetch: false,
+  });
+  assert.equal(YOUR_TURN_MESSAGE, 'Your turn');
+});
+
+test('no other notice asks for the success pulse', () => {
+  const outcomes: HoldOutcome[] = [
+    { id: 1, kind: 'taken', seatIds: [] },
+    { id: 2, kind: 'unavailable' },
+    { id: 3, kind: 'rateLimited' },
+    { id: 4, kind: 'busy' },
+    { id: 5, kind: 'limitReached', holdLimit: null },
+    { id: 6, kind: 'uncertain' },
+    { id: 7, kind: 'rejected', message: 'x' },
+  ];
+  for (const outcome of outcomes) assert.notEqual(needNotice(outcome, rows).success, true, outcome.kind);
+  assert.notEqual(lostPicksNotice(rows, ['D-8']).success, true);
 });

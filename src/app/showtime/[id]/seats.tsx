@@ -1,19 +1,23 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { isWaitingRoomRequiredError } from '../../../api/movies';
 import {
   HELD_LOCKED_MESSAGE,
   PAYMENT_DEFERRED_MESSAGE,
   STALE_MAP_MESSAGE,
   holdOutcomeNotice,
   lostPicksNotice,
+  yourTurnNotice,
   type SeatNotice,
 } from '../../../api/seatNotices';
-import { NO_SEATS_MESSAGE } from '../../../api/seats';
+import { NO_SEATS_MESSAGE, isShowtimeId, quietRejoinStatus } from '../../../api/seats';
+import { useClockSeconds } from '../../../api/useClockSeconds';
 import { usePollActive } from '../../../api/usePollActive';
 import { useSeatHold } from '../../../api/useSeatHold';
 import { useShowtimeSeats } from '../../../api/useSeats';
+import { useWaitingRoom } from '../../../api/useWaitingRoom';
 import {
   BottomSheet,
   Button,
@@ -21,10 +25,12 @@ import {
   EmptyState,
   Icon,
   LiveCountdown,
+  OverloadedState,
   SeatLegend,
   SeatMap,
   Skeleton,
   Text,
+  WaitingRoomView,
   useToast,
 } from '../../../components';
 import {
@@ -59,6 +65,13 @@ const NO_SEATS: readonly string[] = [];
  * - Leaving the screen gives the seats back. When the time runs out a sheet says so (Figma 57:11576).
  * Checkout, payment and the booking are the payments chapter: with seats held, Continue says so rather than
  * pretending (its destination is Figma Checkout, 60:12130).
+ *
+ * Traffic slice 5d puts the waiting room in front of all of it (ADR 0017). The server answers the seat map and a hold
+ * with a 403 unless the install has a pass for this showing, so the screen joins the line first and shows
+ * `WaitingRoomView` until it is let in; only then does the seat map load and start polling (the polls are the pass's
+ * heartbeat). If the pass is lost later (a 403 from the map or from Continue) the screen joins again quietly and, for
+ * Continue, takes the hold once it is back in. A server that says it is overloaded is shown `OverloadedState`, which
+ * counts down the server's Retry-After and tries again by itself. Going back leaves the line.
  */
 export default function SeatSelectionScreen() {
   const router = useRouter();
@@ -66,15 +79,40 @@ export default function SeatSelectionScreen() {
   const toast = useToast();
   const insets = useSafeAreaInsets();
 
-  const params = useLocalSearchParams<{ id?: string; title?: string }>();
+  const params = useLocalSearchParams<{ id?: string; title?: string; showing?: string }>();
   const showtimeId = typeof params.id === 'string' ? params.id : '';
-  // The title is display-only, passed by the screen that linked here; a deep link has none.
+  // The title and the showing are display-only, passed by the screen that linked here; a deep link has neither.
   const title = typeof params.title === 'string' && params.title ? params.title : undefined;
+  const showing = typeof params.showing === 'string' && params.showing ? params.showing : undefined;
 
   const pollActive = usePollActive();
-  const { status, data, error, isFetching, stale, refetch } = useShowtimeSeats(showtimeId, { polling: pollActive });
+  // An id that is not a showing has no line to stand in: the room stays out of it and the screen shows what it always did.
+  const standsInLine = isShowtimeId(showtimeId);
+  const { state: room, controller: roomController } = useWaitingRoom(showtimeId, { enabled: standsInLine, active: pollActive });
+  const admitted = !standsInLine || room.phase === 'admitted';
+  const {
+    status: seatsStatus,
+    data,
+    error,
+    isFetching,
+    stale,
+    overloadClock,
+    refetch,
+  } = useShowtimeSeats(showtimeId, {
+    // The map is asked for only once the room has let this install in: before that it would answer 403.
+    enabled: admitted,
+    polling: pollActive && admitted,
+  });
+  // A 403 for a person who was let in means the pass lapsed and the screen is joining again by itself (below): loading, not an error.
+  const status = quietRejoinStatus(seatsStatus, error);
   const { state: hold, controller } = useSeatHold(showtimeId);
   const rows = data?.rows;
+  // The "very busy" countdown for a seat map the server could not serve. When it ends the map is asked for again; in the
+  // background it does not, and the refresh on return does (useShowtimeSeats).
+  const overloadSeconds = useClockSeconds(status === 'server_overloaded' ? overloadClock : null, () => {
+    if (pollActive) refetch();
+  });
+  const busySeconds = useClockSeconds(room.phase === 'busy' ? room.retry : null);
 
   const [picked, setPicked] = useState<readonly string[]>([]);
   // The latest picks, for a Toast action that runs later (written after render, read in a handler).
@@ -133,11 +171,49 @@ export default function SeatSelectionScreen() {
     if (draft) raise(draft);
   }
 
+  // Let in after standing in the line: a pulse and a short Toast. Being let straight in (the room had space) is not an event.
+  const [seenAdmission, setSeenAdmission] = useState(0);
+  if (room.admission && room.admission.id !== seenAdmission) {
+    setSeenAdmission(room.admission.id);
+    if (room.admission.waited) raise(yourTurnNotice());
+  }
+
+  // The pass is gone (a 403 from the seat map): join again, quietly. The map stays on screen unless the line is no longer empty.
+  useEffect(() => {
+    if (isWaitingRoomRequiredError(error)) roomController.rejoin();
+  }, [error, roomController]);
+
+  // Continue was refused for the same reason (a 403): join again, then take the hold once it is back in.
+  const resumeHold = useRef(false);
+  useEffect(() => {
+    if (hold.outcome?.kind !== 'needsPass') return;
+    resumeHold.current = true;
+    roomController.rejoin();
+  }, [hold.outcome, roomController]);
+  // Every admission after the first is a re-join. The map may have been refused (and, after three refusals, stopped polling)
+  // while the pass was gone, so ask for it again now; and if Continue was what found the pass gone, take the hold.
+  const refetchRef = useRef(refetch);
+  useEffect(() => {
+    refetchRef.current = refetch;
+  });
+  const admissionsSeen = useRef(0);
+  useEffect(() => {
+    if (!room.admission) return;
+    admissionsSeen.current += 1;
+    if (admissionsSeen.current > 1) refetchRef.current();
+    if (!resumeHold.current) return;
+    resumeHold.current = false;
+    controller.acquire(pickedRef.current);
+  }, [room.admission, controller]);
+
   const shownNotice = useRef(0);
   useEffect(() => {
-    if (!notice || notice.id <= shownNotice.current) return;
+    // The footer is measured once the map's layout is on screen. A notice raised before that (being let in is raised while
+    // the waiting room still fills the screen) waits for it, so its Toast sits above the Continue button, not over it.
+    if (!notice || notice.id <= shownNotice.current || footerHeight === 0) return;
     shownNotice.current = notice.id;
-    if (notice.haptic) haptics.warning();
+    if (notice.success) haptics.success();
+    else if (notice.haptic) haptics.warning();
     toast.show({
       message: notice.message,
       tone: notice.tone,
@@ -145,7 +221,7 @@ export default function SeatSelectionScreen() {
       action: notice.retry ? { label: 'Try again', onPress: () => controller.acquire(pickedRef.current) } : undefined,
     });
     if (notice.refetch) refetch();
-  }, [notice, toast, toastOffset, controller, refetch]);
+  }, [notice, toast, toastOffset, footerHeight, controller, refetch]);
 
   // A refresh failed once or twice: the last good map stays, and we say so once.
   const wasStale = useRef(false);
@@ -201,8 +277,16 @@ export default function SeatSelectionScreen() {
     refetch();
   }, [controller, refetch]);
 
-  // Back, swipe and the system back all unmount this screen, and the hold hook gives the seats back then.
+  // Back, swipe and the system back all unmount this screen, and the hold hook gives the seats back then and the waiting
+  // room hook gives the place back.
   const goBack = useCallback(() => router.back(), [router]);
+
+  // "Leave the queue": give the place back now, then go back. A deep link has nowhere to go back to, so it goes home.
+  const onLeaveQueue = useCallback(() => {
+    roomController.leave();
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }, [roomController, router]);
 
   const loading = status === 'loading';
   const showsMap = status === 'loading' || status === 'ready';
@@ -213,37 +297,60 @@ export default function SeatSelectionScreen() {
     ? composeSeatingSubtitle({ title, startsAt: data.startsAt, time: data.time, format: data.screen.format })
     : title;
 
+  // The line comes first. Nothing below (the map, the footer, the polling) is shown until the room lets this install in.
+  if (!admitted) {
+    return (
+      <SafeAreaView style={[styles.screen, { backgroundColor: colors['surface/default'] }]} edges={['top', 'bottom']}>
+        {room.phase === 'busy' ? (
+          // Figma 107:15558: the server (or the line) is full. It counts down and tries again by itself.
+          <View style={styles.content}>
+            <ScreenHeader subtitle={title} onBack={goBack} />
+            <OverloadedState secondsUntilRetry={busySeconds} retrying={room.retrying} onRetry={roomController.retry} />
+          </View>
+        ) : room.phase === 'failed' ? (
+          <View style={styles.content}>
+            <ScreenHeader subtitle={title} onBack={goBack} />
+            {room.failure?.kind === 'not_found' ? (
+              <EmptyState
+                icon="info"
+                headline="This showing isn’t available"
+                body="It may have been removed. Pick another time."
+                actionLabel="See other times"
+                onAction={goBack}
+              />
+            ) : (
+              <EmptyState
+                icon="error"
+                headline="Couldn’t join the queue"
+                body={room.failure?.message ?? 'Check your connection and try again.'}
+                actionLabel="Try again"
+                onAction={roomController.retry}
+              />
+            )}
+          </View>
+        ) : (
+          // Figma 56:6607 (and the skeleton 56:6691 until the join answers).
+          <WaitingRoomView
+            loading={room.phase !== 'waiting'}
+            ahead={room.ahead ?? 0}
+            stale={room.stale}
+            title={title}
+            showing={showing}
+            onLeave={onLeaveQueue}
+          />
+        )}
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors['surface/default'] }]} edges={['top']}>
       <View style={styles.content}>
-        <View style={styles.header}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            onPress={goBack}
-            style={({ pressed }) => [
-              styles.backButton,
-              pressed ? { backgroundColor: colors['secondary/pressed'] } : undefined,
-            ]}
-          >
-            <Icon name="chevron-left" size="lg" color="text/primary" />
-          </Pressable>
-          <View style={styles.titles}>
-            <Text variant="title" color="text/primary" accessibilityRole="header">
-              Pick your seats
-            </Text>
-            {subtitle ? (
-              <Text variant="caption" color="text/secondary">
-                {subtitle}
-              </Text>
-            ) : loading ? (
-              <Skeleton shape="text" width={primitives['size/poster-width']} height={primitives['space/3']} />
-            ) : null}
-          </View>
+        <ScreenHeader subtitle={subtitle} loadingSubtitle={loading} onBack={goBack}>
           {/* The hold's Countdown (Figma header, right): running while held, "0:00" under the expiry sheet. */}
           {hold.phase === 'held' && hold.clock ? <LiveCountdown clock={hold.clock} /> : null}
           {hold.phase === 'expired' ? <Countdown secondsRemaining={0} /> : null}
-        </View>
+        </ScreenHeader>
 
         {showsMap ? (
           <View style={styles.map}>
@@ -268,13 +375,8 @@ export default function SeatSelectionScreen() {
         ) : null}
 
         {status === 'server_overloaded' ? (
-          <EmptyState
-            icon="error"
-            headline="Server overloaded"
-            body="Seats are temporarily unavailable. Please try again in a moment."
-            actionLabel={isFetching ? 'Retrying…' : 'Try again'}
-            onAction={refetch}
-          />
+          // Figma 107:15558. The booking funnel counts down the server's Retry-After and tries again by itself.
+          <OverloadedState secondsUntilRetry={overloadSeconds} retrying={isFetching} onRetry={refetch} />
         ) : null}
 
         {status === 'error' ? (
@@ -356,6 +458,46 @@ export default function SeatSelectionScreen() {
         </View>
       </BottomSheet>
     </SafeAreaView>
+  );
+}
+
+interface ScreenHeaderProps {
+  /** The line under the title (the film, and when known the showing). */
+  subtitle?: string;
+  /** No subtitle yet because the seat map is still loading: draw its skeleton. */
+  loadingSubtitle?: boolean;
+  onBack: () => void;
+  /** Right-hand side: the hold's countdown. */
+  children?: ReactNode;
+}
+
+/** The back button, "Pick your seats" and the film: the header of the map, and of the states that replace the map. */
+function ScreenHeader({ subtitle, loadingSubtitle = false, onBack, children }: ScreenHeaderProps) {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.header}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        onPress={onBack}
+        style={({ pressed }) => [styles.backButton, pressed ? { backgroundColor: colors['secondary/pressed'] } : undefined]}
+      >
+        <Icon name="chevron-left" size="lg" color="text/primary" />
+      </Pressable>
+      <View style={styles.titles}>
+        <Text variant="title" color="text/primary" accessibilityRole="header">
+          Pick your seats
+        </Text>
+        {subtitle ? (
+          <Text variant="caption" color="text/secondary">
+            {subtitle}
+          </Text>
+        ) : loadingSubtitle ? (
+          <Skeleton shape="text" width={primitives['size/poster-width']} height={primitives['space/3']} />
+        ) : null}
+      </View>
+      {children}
+    </View>
   );
 }
 

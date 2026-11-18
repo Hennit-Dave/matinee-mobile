@@ -14,9 +14,11 @@ import type { ShowtimeSeatRow } from './seats';
  */
 export interface SeatNoticeDraft {
   message: string;
-  tone: 'info' | 'error';
+  tone: 'info' | 'success' | 'error';
   /** A warning buzz: used when seats the user wanted were lost, like the seat-cap refusal. */
   haptic: boolean;
+  /** A success pulse instead: the moment the person was waiting for (their turn in the waiting room). */
+  success?: boolean;
   /** Offer a "Try again" action that asks for the hold again. */
   retry: boolean;
   /** Refresh the map straight away (a refusal means the map on screen is out of date). */
@@ -26,6 +28,13 @@ export interface SeatNoticeDraft {
 export interface SeatNotice extends SeatNoticeDraft {
   /** Rises with each notice, so a screen that renders the same state twice shows it once. */
   id: number;
+}
+
+/** The waiting room let the person in after they stood in the line: a success pulse and a short Toast. No Figma frame. */
+export const YOUR_TURN_MESSAGE = 'Your turn';
+
+export function yourTurnNotice(): SeatNoticeDraft {
+  return { message: YOUR_TURN_MESSAGE, tone: 'success', haptic: false, success: true, retry: false, refetch: false };
 }
 
 /** A refresh showed that seats picked earlier are now held or sold by someone else (Figma 57:7594). */
