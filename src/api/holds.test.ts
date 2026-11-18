@@ -384,3 +384,114 @@ test('a 429 whose body is not the server envelope is retryable but NOT called ra
 test('a 429 is not an "overloaded server": that state stays for 503', () => {
   assert.equal(isServerOverloadedError(new MovieApiError('x', { status: 429, kind: 'rate_limited' })), false);
 });
+
+// ---- The waiting room and the hoarding cap (traffic slice 5d, ADR 0017 and 0018) --------------------
+
+test('403 waiting_room_required on a hold: needsPass, and nothing is held', async () => {
+  await withFetch(
+    () => json(403, errorBody('waiting_room_required')),
+    async () => {
+      const error = await acquireHold(SHOWTIME, [SEAT_A], CLIENT, undefined, BASE).then(
+        () => null,
+        (e: unknown) => e
+      );
+      assert.ok(error instanceof MovieApiError);
+      assert.equal(error.kind, 'waiting_room_required');
+      assert.equal(error.status, 403);
+      // The room checks the pass before the hold script runs, like the rate limiter: the request was never processed.
+      assert.deepEqual(classifyHoldError(error), { kind: 'needsPass', maybeHeld: false });
+    }
+  );
+});
+
+test('409 hold_limit_reached on a hold: limitReached with the numbers the server sent, and nothing new is held', async () => {
+  await withFetch(
+    () => json(409, errorBody('hold_limit_reached', { scope: 'owner', limit: 8, held: 8 })),
+    async () => {
+      const error = await acquireHold(SHOWTIME, [SEAT_A], CLIENT, undefined, BASE).then(
+        () => null,
+        (e: unknown) => e
+      );
+      assert.ok(error instanceof MovieApiError);
+      assert.deepEqual(classifyHoldError(error), {
+        kind: 'limitReached',
+        holdLimit: { scope: 'owner', limit: 8, held: 8 },
+        maybeHeld: false,
+      });
+    }
+  );
+});
+
+test('hold_limit_reached at the address cap is told apart from the owner cap', () => {
+  const error = new MovieApiError('x', {
+    status: 409,
+    kind: 'hold_limit_reached',
+    holdLimit: { scope: 'address', limit: 16, held: 16 },
+  });
+  assert.deepEqual(classifyHoldError(error), {
+    kind: 'limitReached',
+    holdLimit: { scope: 'address', limit: 16, held: 16 },
+    maybeHeld: false,
+  });
+});
+
+test('hold_limit_reached with a body the app cannot read is still a limit, with no number made up', async () => {
+  for (const extra of [{}, { scope: 'planet', limit: 8, held: 8 }, { scope: 'owner', limit: 'eight', held: 8 }]) {
+    await withFetch(
+      () => json(409, errorBody('hold_limit_reached', extra)),
+      async () => {
+        const error = await acquireHold(SHOWTIME, [SEAT_A], CLIENT, undefined, BASE).then(
+          () => null,
+          (e: unknown) => e
+        );
+        assert.ok(error instanceof MovieApiError);
+        assert.equal(error.holdLimit, undefined);
+        assert.deepEqual(classifyHoldError(error), { kind: 'limitReached', holdLimit: null, maybeHeld: false });
+      }
+    );
+  }
+});
+
+test('503 server_busy on a hold: busy, with the jittered Retry-After, and the seats MAY be held', async () => {
+  await withFetch(
+    () => json(503, errorBody('server_busy'), { 'Retry-After': '12' }),
+    async () => {
+      const error = await acquireHold(SHOWTIME, [SEAT_A], CLIENT, undefined, BASE).then(
+        () => null,
+        (e: unknown) => e
+      );
+      assert.ok(error instanceof MovieApiError);
+      assert.equal(error.kind, 'server_busy');
+      assert.equal(error.retryAfterSeconds, 12);
+      assert.deepEqual(classifyHoldError(error), { kind: 'busy', retryAfterMs: 12_000, maybeHeld: true });
+    }
+  );
+});
+
+test('server_busy without a Retry-After falls back to 2 s, and a huge one is capped', () => {
+  assert.deepEqual(classifyHoldError(new MovieApiError('x', { status: 503, kind: 'server_busy' })), {
+    kind: 'busy',
+    retryAfterMs: DEFAULT_RETRY_AFTER_MS,
+    maybeHeld: true,
+  });
+  const huge = classifyHoldError(new MovieApiError('x', { status: 503, kind: 'server_busy', retryAfterSeconds: MAX_RETRY_AFTER_SECONDS }));
+  assert.equal(huge.kind === 'busy' && huge.retryAfterMs, MAX_RETRY_AFTER_SECONDS * 1000);
+});
+
+test('a shed hold is cautious like a 503 and the opposite of a 429 or a missing pass on "could the seats be held?"', () => {
+  const maybe = (kind: ConstructorParameters<typeof MovieApiError>[1]['kind'], status: number) =>
+    classifyHoldError(new MovieApiError('x', { status, kind })).maybeHeld;
+  assert.equal(maybe('server_busy', 503), true, 'a timed-out call can still land');
+  assert.equal(maybe('waiting_room_required', 403), false, 'refused before the hold script');
+  assert.equal(maybe('hold_limit_reached', 409), false, 'refused before the hold script');
+  assert.equal(maybe('rate_limited', 429), false);
+});
+
+test('the 5d codes are all retryable or not as the server means them', () => {
+  const retryable = (kind: ConstructorParameters<typeof MovieApiError>[1]['kind'], status: number) =>
+    new MovieApiError('x', { status, kind }).retryable;
+  assert.equal(retryable('server_busy', 503), true);
+  assert.equal(retryable('waiting_room_full', 503), true);
+  assert.equal(retryable('waiting_room_required', 403), false);
+  assert.equal(retryable('hold_limit_reached', 409), false);
+});

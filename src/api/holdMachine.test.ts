@@ -540,3 +540,141 @@ test('a screen that has unsubscribed is not told about later changes', async () 
   await flush();
   assert.equal(calls, 1);
 });
+
+// ---- The waiting room and the hoarding cap (traffic slice 5d) ---------------------------------------
+
+const busy = (retryAfterSeconds?: number) => new MovieApiError('busy', { status: 503, kind: 'server_busy', retryAfterSeconds });
+const needsPass = () => new MovieApiError('no pass', { status: 403, kind: 'waiting_room_required' });
+const overLimit = (holdLimit?: { scope: 'owner' | 'address'; limit: number; held: number }) =>
+  new MovieApiError('limit', { status: 409, kind: 'hold_limit_reached', holdLimit });
+
+test('503 server_busy: idle with a busy outcome, and the NEXT attempt waits out the jittered Retry-After', async () => {
+  const h = harness();
+  h.controller.acquire([A, B]);
+  h.acquires[0]!.reject(busy(11));
+  await flush();
+  assert.equal(h.controller.getState().phase, 'idle');
+  assert.deepEqual(h.controller.getState().outcome, { id: 1, kind: 'busy' });
+
+  h.controller.acquire([A, B]);
+  assert.equal(h.controller.getState().phase, 'acquiring', 'the button shows it is working');
+  assert.equal(h.calls.acquire.length, 1, 'but nothing is sent yet');
+  h.advance(10_999);
+  assert.equal(h.calls.acquire.length, 1, 'still inside the 11 s the server asked for');
+  h.advance(2);
+  assert.equal(h.calls.acquire.length, 2);
+
+  h.acquires[1]!.resolve(hold([A, B]));
+  await flush();
+  assert.equal(h.controller.getState().phase, 'held');
+});
+
+test('server_busy without a Retry-After falls back to 2 s', async () => {
+  const h = harness();
+  h.controller.acquire([A]);
+  h.acquires[0]!.reject(busy());
+  await flush();
+  h.controller.acquire([A]);
+  h.advance(1_900);
+  assert.equal(h.calls.acquire.length, 1);
+  h.advance(200);
+  assert.equal(h.calls.acquire.length, 2);
+});
+
+test('a shed hold may have landed (a timed-out Redis call can still run), so leaving releases the seats', async () => {
+  const h = harness();
+  h.controller.acquire([A, B]);
+  h.acquires[0]!.reject(busy(5));
+  await flush();
+  h.controller.detach();
+  assert.deepEqual(h.calls.release, [[A, B]]);
+});
+
+test('leaving while waiting out a server_busy cancels the wait and still releases what it may have left', async () => {
+  const h = harness();
+  h.controller.acquire([A, B]);
+  h.acquires[0]!.reject(busy(5));
+  await flush();
+  h.controller.acquire([A, B]); // waiting
+  h.controller.detach();
+  h.advance(10_000);
+  assert.equal(h.calls.acquire.length, 1, 'the delayed request is never sent');
+  assert.deepEqual(h.calls.release, [[A, B]]);
+});
+
+test('403 needsPass: idle with a needsPass outcome, nothing held, and NO wait before asking again', async () => {
+  const h = harness();
+  h.controller.acquire([A, B]);
+  h.acquires[0]!.reject(needsPass());
+  await flush();
+  assert.equal(h.controller.getState().phase, 'idle');
+  assert.deepEqual(h.controller.getState().outcome, { id: 1, kind: 'needsPass' });
+  assert.deepEqual(h.controller.getState().seatIds, []);
+
+  // The screen joins the line, is admitted, and asks again straight away: no gate, because there was no Retry-After.
+  h.controller.acquire([A, B]);
+  assert.equal(h.calls.acquire.length, 2, 'sent at once');
+  h.acquires[1]!.resolve(hold([A, B]));
+  await flush();
+  assert.equal(h.controller.getState().phase, 'held');
+  assert.deepEqual(h.controller.getState().seatIds, [A, B]);
+});
+
+test('403 needsPass means nothing is held: leaving sends NO release', async () => {
+  const h = harness();
+  h.controller.acquire([A, B]);
+  h.acquires[0]!.reject(needsPass());
+  await flush();
+  h.controller.detach();
+  assert.deepEqual(h.calls.release, []);
+});
+
+test('a needsPass after an unclear failure for the same seats still releases them on leaving', async () => {
+  const h = harness();
+  h.controller.acquire([A, B]);
+  h.acquires[0]!.reject(offline()); // no answer: it may have been processed
+  await flush();
+  h.controller.acquire([A, B]);
+  h.acquires[1]!.reject(needsPass()); // the second was refused, which says nothing about the first
+  await flush();
+  h.controller.detach();
+  assert.deepEqual(h.calls.release, [[A, B]]);
+});
+
+test('409 hold_limit_reached: idle with the limit in the outcome, nothing new held, no wait, no release', async () => {
+  const h = harness();
+  h.controller.acquire([A, B]);
+  h.acquires[0]!.reject(overLimit({ scope: 'owner', limit: 8, held: 8 }));
+  await flush();
+  assert.equal(h.controller.getState().phase, 'idle');
+  assert.deepEqual(h.controller.getState().outcome, {
+    id: 1,
+    kind: 'limitReached',
+    holdLimit: { scope: 'owner', limit: 8, held: 8 },
+  });
+
+  h.controller.acquire([A]); // fewer seats is allowed at once: there is no Retry-After to wait out
+  assert.equal(h.calls.acquire.length, 2);
+
+  h.controller.detach();
+  assert.deepEqual(h.calls.release, [], 'the cap refused the request: nothing of this attempt was held');
+});
+
+test('a limit answer that carries no readable numbers is still an outcome, with no limit in it', async () => {
+  const h = harness();
+  h.controller.acquire([A]);
+  h.acquires[0]!.reject(overLimit());
+  await flush();
+  assert.deepEqual(h.controller.getState().outcome, { id: 1, kind: 'limitReached', holdLimit: null });
+});
+
+test('the new outcomes get their own ids, so the screen shows each once', async () => {
+  const h = harness();
+  h.controller.acquire([A]);
+  h.acquires[0]!.reject(needsPass());
+  await flush();
+  h.controller.acquire([A]);
+  h.acquires[1]!.reject(overLimit({ scope: 'owner', limit: 8, held: 8 }));
+  await flush();
+  assert.equal(h.controller.getState().outcome?.id, 2);
+});

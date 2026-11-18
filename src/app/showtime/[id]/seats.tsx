@@ -129,7 +129,8 @@ export default function SeatSelectionScreen() {
     setSeenOutcome(outcome.id);
     // A 409 means the whole request was refused (nothing is held): drop the taken seats, keep the rest.
     if (outcome.kind === 'taken') setPicked(picked.filter((id) => !outcome.seatIds.includes(id)));
-    raise(holdOutcomeNotice(outcome, rows));
+    const draft = holdOutcomeNotice(outcome, rows);
+    if (draft) raise(draft);
   }
 
   const shownNotice = useRef(0);

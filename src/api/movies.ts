@@ -50,6 +50,15 @@ export interface MovieDetail {
  * `rate_limited` is a 429 (ADR 0016): the caller made too many requests to a limited route (hold, booking, search,
  * seat map) and must wait. The wait is in the `Retry-After` header, in whole seconds, not in the body. The limiter
  * runs BEFORE the route's own work, so a 429 means the request was not processed at all.
+ *
+ * The waiting room and the hoarding cap (ADR 0017, ADR 0018) add four:
+ *  - `waiting_room_required` (403): no pass for this showing. Join the line (`waitingRoom.ts`), then ask again.
+ *  - `hold_limit_reached` (409): this install, or this address, already holds the most seats the server allows for one
+ *    showing. The body says which cap (`scope`), how high it is (`limit`) and how many are held (`held`). No `Retry-After`:
+ *    waiting does not help, giving seats back does.
+ *  - `server_busy` (503): the server is shedding load or a dependency timed out. `Retry-After` is jittered (5 to 15 s)
+ *    so a crowd does not come back in step.
+ *  - `waiting_room_full` (503): too many people are already in the line. `Retry-After` as above.
  */
 export type ApiErrorCode =
   | 'not_found'
@@ -62,7 +71,23 @@ export type ApiErrorCode =
   | 'seat_taken'
   | 'seat_not_held'
   | 'holds_unavailable'
-  | 'rate_limited';
+  | 'rate_limited'
+  | 'hold_limit_reached'
+  | 'waiting_room_required'
+  | 'waiting_room_full'
+  | 'server_busy';
+
+/** Which seat cap a `hold_limit_reached` hit: one install's own (`owner`) or everyone behind one address (`address`). */
+export type HoldLimitScope = 'owner' | 'address';
+
+/** What a `hold_limit_reached` body carries (ADR 0018). */
+export interface HoldLimit {
+  scope: HoldLimitScope;
+  /** The cap that was hit. */
+  limit: number;
+  /** How many seats were already held under it. */
+  held: number;
+}
 
 export interface ApiErrorDetail {
   path: string;
@@ -79,6 +104,10 @@ export interface ApiErrorBody {
     details?: ApiErrorDetail[];
     /** Only on `seat_taken` and `seat_not_held`: which seats the refusal is about (ADR 0015). */
     seatIds?: string[];
+    /** Only on `hold_limit_reached` (ADR 0018). The server puts these three beside `code`, not in a nested object. */
+    scope?: unknown;
+    limit?: unknown;
+    held?: unknown;
   };
 }
 
@@ -130,6 +159,8 @@ export class MovieApiError extends Error {
   readonly seatIds?: string[];
   /** The server's `Retry-After`, in whole seconds, when it sent one. */
   readonly retryAfterSeconds?: number;
+  /** Only on a `hold_limit_reached`: which cap, how high, how many held. */
+  readonly holdLimit?: HoldLimit;
 
   constructor(
     message: string,
@@ -140,6 +171,7 @@ export class MovieApiError extends Error {
       retryable?: boolean;
       seatIds?: string[];
       retryAfterSeconds?: number;
+      holdLimit?: HoldLimit;
     }
   ) {
     super(message);
@@ -149,11 +181,14 @@ export class MovieApiError extends Error {
     this.requestId = options.requestId;
     this.seatIds = options.seatIds;
     this.retryAfterSeconds = options.retryAfterSeconds;
+    this.holdLimit = options.holdLimit;
     this.retryable =
       options.retryable ??
       (options.status === 503 ||
         options.status === 429 ||
         options.kind === 'rate_limited' ||
+        options.kind === 'server_busy' ||
+        options.kind === 'waiting_room_full' ||
         options.kind === 'upstream_unavailable' ||
         options.kind === 'service_unavailable' ||
         options.kind === 'network_error');
@@ -163,6 +198,14 @@ export class MovieApiError extends Error {
 /** The server said "too many requests" (429 `rate_limited`). Nothing was processed; wait `Retry-After`, then ask again. */
 export function isRateLimitedError(error: unknown): error is MovieApiError {
   return error instanceof MovieApiError && error.kind === 'rate_limited';
+}
+
+/**
+ * The server said "no pass for this showing" (403 `waiting_room_required`, ADR 0017): the caller never joined the
+ * line, left it, or let its pass lapse. Nothing was processed; join (again), then repeat the request.
+ */
+export function isWaitingRoomRequiredError(error: unknown): error is MovieApiError {
+  return error instanceof MovieApiError && error.kind === 'waiting_room_required';
 }
 
 /**
@@ -231,6 +274,19 @@ export function parseRetryAfter(header: string | null): number | undefined {
 /** Only an array of strings counts; anything else is dropped rather than guessed at. */
 function readSeatIds(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.every((item) => typeof item === 'string') ? (value as string[]) : undefined;
+}
+
+/**
+ * The three fields of a `hold_limit_reached`, or nothing when any is missing or not a sensible number. The Toast then
+ * uses wording that names no number, rather than a number the app made up.
+ */
+export function readHoldLimit(error: ApiErrorBody['error']): HoldLimit | undefined {
+  if (error.code !== 'hold_limit_reached') return undefined;
+  const { scope, limit, held } = error;
+  if (scope !== 'owner' && scope !== 'address') return undefined;
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1) return undefined;
+  if (typeof held !== 'number' || !Number.isInteger(held) || held < 0) return undefined;
+  return { scope, limit, held };
 }
 
 function isApiErrorBody(value: unknown): value is ApiErrorBody {
@@ -333,6 +389,7 @@ export async function fetchApiJson<T>(
         requestId: body.error.requestId,
         seatIds: readSeatIds(body.error.seatIds),
         retryAfterSeconds: parseRetryAfter(res.headers.get('Retry-After')),
+        holdLimit: readHoldLimit(body.error),
       });
     }
     throw new MovieApiError('Movie request failed.', {

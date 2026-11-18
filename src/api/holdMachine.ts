@@ -1,5 +1,6 @@
 import { remainingMs, startHoldClock, type ClockReading, type HoldClock } from './holdClock';
 import { classifyHoldError, type HoldResponse } from './holds';
+import type { HoldLimit } from './movies';
 
 /**
  * The seat-hold flow for one showing, with no React in it so it is unit-tested with `node --test` (there is no
@@ -34,6 +35,9 @@ export type HoldOutcome =
   | { id: number; kind: 'taken'; seatIds: string[] }
   | { id: number; kind: 'unavailable' }
   | { id: number; kind: 'rateLimited' }
+  | { id: number; kind: 'busy' }
+  | { id: number; kind: 'needsPass' }
+  | { id: number; kind: 'limitReached'; holdLimit: HoldLimit | null }
   | { id: number; kind: 'uncertain' }
   | { id: number; kind: 'rejected'; message: string };
 
@@ -62,8 +66,8 @@ export interface HoldController {
   subscribe(listener: () => void): () => void;
   /**
    * Take a hold on these seats (all or nothing). Ignored unless `idle`, so a second tap while one is in flight
-   * does nothing. After a `holds_unavailable` (503) or a `rate_limited` (429) it waits out the server's
-   * `Retry-After` before sending.
+   * does nothing. After a `holds_unavailable` or `server_busy` (503) or a `rate_limited` (429) it waits out the
+   * server's `Retry-After` before sending.
    */
   acquire(seatIds: readonly string[]): void;
   /** "Change seats": give the hold back at once and return to `idle`. Only meaningful while `held`. */
@@ -161,9 +165,15 @@ export function createHoldController(deps: HoldDeps): HoldController {
       }
       if (failure.kind === 'taken') refuse({ kind: 'taken', seatIds: failure.seatIds });
       else if (failure.kind === 'rejected') refuse({ kind: 'rejected', message: failure.message });
-      else if (failure.kind === 'unavailable' || failure.kind === 'rateLimited') {
-        // Both are "come back after Retry-After". They differ only in `maybeHeld` (handled above): a 503 may have
-        // left a hold behind, a 429 cannot have.
+      else if (failure.kind === 'needsPass') {
+        // No pass for this showing (ADR 0017): the room refused before any hold was attempted. Nothing to wait for
+        // here, so no gate: the screen joins the line again and asks for the hold once it is admitted.
+        refuse({ kind: 'needsPass' });
+      } else if (failure.kind === 'limitReached') {
+        refuse({ kind: 'limitReached', holdLimit: failure.holdLimit });
+      } else if (failure.kind === 'unavailable' || failure.kind === 'rateLimited' || failure.kind === 'busy') {
+        // All three are "come back after Retry-After". They differ only in `maybeHeld` (handled above): a 503 or a
+        // shed `server_busy` may have left a hold behind, a 429 cannot have.
         gateUntilMono = deps.now().mono + failure.retryAfterMs;
         refuse({ kind: failure.kind });
       } else refuse({ kind: 'uncertain' });
