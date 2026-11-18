@@ -133,6 +133,16 @@ export default function TicketScreen() {
           </Card>
         </View>
       ) : null}
+
+      {status === 'ready' && ticket && !ticket.ticket ? (
+        <EmptyState
+          icon="info"
+          headline="This booking isn't available"
+          body="It wasn't confirmed. If you were charged, your payment has been refunded."
+          actionLabel="Back to home"
+          onAction={goBack}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
