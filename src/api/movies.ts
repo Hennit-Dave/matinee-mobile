@@ -75,7 +75,9 @@ export type ApiErrorCode =
   | 'hold_limit_reached'
   | 'waiting_room_required'
   | 'waiting_room_full'
-  | 'server_busy';
+  | 'server_busy'
+  | 'idempotency_mismatch'
+  | 'payment_unavailable';
 
 /** Which seat cap a `hold_limit_reached` hit: one install's own (`owner`) or everyone behind one address (`address`). */
 export type HoldLimitScope = 'owner' | 'address';

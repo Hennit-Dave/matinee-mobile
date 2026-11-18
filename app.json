@@ -8,7 +8,18 @@
     "userInterfaceStyle": "automatic",
     "plugins": [
       "expo-router",
-      ["expo-secure-store", { "faceIDPermission": false }]
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantDisplayName": "Matinee"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
