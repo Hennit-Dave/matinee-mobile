@@ -63,6 +63,7 @@ Every `EXPO_PUBLIC_*` variable is bundled into the app and readable by anyone.
 | Variable | Why it is safe to expose |
 |---|---|
 | `EXPO_PUBLIC_API_URL` | The public address of the Matinee server. Not a secret. |
+| `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` | A Stripe **publishable** key (test mode). It identifies the Stripe account and cannot charge anyone; the secret key stays on the server. |
 
 ## Seat holds, the install id and live seats
 
@@ -76,7 +77,9 @@ The seat screen takes a real, server-side hold on the picked seats and keeps the
   background, and refreshes at once on return.
 - **Fail closed:** if the server's Redis is down, new holds are refused with a retryable message and the seat map itself
   returns an error rather than a guess. Nothing is ever shown as free that might not be.
-- **Payment is the next chapter.** With seats held, Continue says so in a Toast; the app never calls the server's booking route.
+- **Payment opens checkout** (see "Payments" below): with seats held, Continue opens the native PaymentSheet over the seat
+  screen (the hold stays alive). The app never calls the server's direct booking route; a booking is confirmed only by the
+  server's verified webhook.
 
 **The install id.** The app makes one random UUID per install (`expo-crypto`), keeps it in `expo-secure-store`
 (Android Keystore, iOS Keychain), and sends it as `X-Client-Id`. The server treats it as the owner of a hold, so only this
@@ -133,6 +136,26 @@ install can hold (ADR 0018). The seat screen is built around that.
 
 The server's default of 2 people inside at once is a demo setting: `WAITING_ROOM_MAX_ACTIVE` must be raised for production (server ADR 0017).
 Evidence: `docs/evidence/traffic-5d/`.
+
+## Payments (test mode)
+
+Checkout uses the **native Stripe PaymentSheet** (server: ADR 0019), then polls the server until the booking is confirmed.
+
+- **Checkout** is a modal over the seat screen (the hold stays alive). The server prices the order and returns a
+  PaymentIntent `client_secret`; the app presents the PaymentSheet with it. The `Idempotency-Key` header is deterministic
+  on the seats, so a cancelled sheet that is retried returns the SAME PaymentIntent — never a second charge.
+- **PaymentSheet success is not a booking.** The server confirms only on its verified Stripe webhook, so the app polls
+  `GET /orders/:reference` until the order resolves: `succeeded` → the ticket; `refunded` (the hold lapsed) → "your seats were
+  released, payment refunded"; `failed` → "payment didn't go through"; and a sensible timeout → "still confirming" with a re-check.
+- **The ticket** shows the movie, cinema, showtime, seats, the reference and a QR code (the QR lands in the next PR).
+- **This needs an EAS dev build** — `@stripe/stripe-react-native` is a native module and does not run in Expo Go:
+  ```
+  eas login
+  eas build --profile development --platform android
+  ```
+  Then run the dev client (`npx expo start --dev-client`) with `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` (test `pk_test_…`) set.
+
+Evidence: `docs/evidence/payments-p2/`.
 
 ## Docs
 
