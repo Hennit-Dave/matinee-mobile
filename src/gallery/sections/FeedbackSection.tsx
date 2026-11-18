@@ -1,18 +1,34 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Countdown, EmptyState, LiveCountdown, Skeleton, Text, Toast, useToast } from '../../components';
+import {
+  Button,
+  Countdown,
+  EmptyState,
+  LiveCountdown,
+  OverloadedState,
+  Skeleton,
+  Text,
+  Toast,
+  WaitingRoomView,
+  useToast,
+} from '../../components';
 import { readClock, startHoldClock } from '../../api/holdClock';
+import { useClockSeconds } from '../../api/useClockSeconds';
 import { useTheme } from '../../theme';
 import { primitives } from '../../tokens/tokens';
 import { GalleryGroup, GalleryItem, GalleryPanel, GalleryRow } from '../GalleryParts';
-import { MOCK_TOASTS } from '../mocks';
+import { MOCK_TOASTS, MOCK_WAITING_ROOM } from '../mocks';
 
 /** EmptyState fills its parent (flex: 1), so each demo frame needs a definite height. */
 const FRAME_HEIGHT = primitives['space/16'] * 5;
 const FRAME_HEIGHT_TALL = primitives['space/16'] * 6;
+/** A whole waiting-room screen: the film, the line, the note and the button. */
+const FRAME_HEIGHT_SCREEN = primitives['space/16'] * 8;
 
 /** The live demo starts just over 2:00 out, so it crosses into urgent after five seconds and ends after 2:05. */
 const LIVE_DEMO_MS = 125_000;
+/** The overloaded state's live demo counts down the Figma example, 0:14, then says it is trying again. */
+const OVERLOADED_DEMO_MS = 14_000;
 
 export function FeedbackSection() {
   const { colors } = useTheme();
@@ -20,6 +36,8 @@ export function FeedbackSection() {
   const [lastAction, setLastAction] = useState('none yet');
   const [toastAction, setToastAction] = useState('none yet');
   const toast = useToast();
+  const [retryClock, setRetryClock] = useState(() => startHoldClock(OVERLOADED_DEMO_MS, readClock()));
+  const retrySeconds = useClockSeconds(retryClock);
 
   return (
     <>
@@ -182,9 +200,97 @@ export function FeedbackSection() {
           </View>
         </GalleryItem>
 
+        <GalleryItem label="action loading, with a footnote (the two props the overloaded state uses)">
+          <View style={[styles.frame, { borderColor: colors['border/default'], height: FRAME_HEIGHT_TALL }]}>
+            <EmptyState
+              icon="info"
+              headline="Checking again"
+              body="This takes a moment. The button keeps its width while it works."
+              actionLabel="Try again"
+              actionLoading
+              onAction={() => setLastAction('Try again (loading: ignored)')}
+              footnote="A quiet caption under the actions"
+            />
+          </View>
+        </GalleryItem>
+
         <Text variant="caption" color="text/secondary" accessibilityLiveRegion="polite">
           {`Last action: ${lastAction}`}
         </Text>
+      </GalleryGroup>
+
+      <GalleryGroup
+        name="OverloadedState"
+        note="Figma 'System / Server overloaded' (107:15558): an EmptyState with the info icon at 48, the reassurance that nothing was charged, one button, and a caption that counts down the server's Retry-After. For the booking funnel only (the seat screen and the waiting room); the rest of the app keeps the plain EmptyState. It draws the seconds it is given."
+      >
+        <GalleryItem label="counting down: 0:14">
+          <View style={[styles.frame, { borderColor: colors['border/default'], height: FRAME_HEIGHT_TALL }]}>
+            <OverloadedState secondsUntilRetry={14} onRetry={() => setLastAction('Try again now')} />
+          </View>
+        </GalleryItem>
+        <GalleryItem label="trying again: the caption stops counting and the button works (loading dots)">
+          <View style={[styles.frame, { borderColor: colors['border/default'], height: FRAME_HEIGHT_TALL }]}>
+            <OverloadedState secondsUntilRetry={0} retrying onRetry={() => setLastAction('Try again now (loading: ignored)')} />
+          </View>
+        </GalleryItem>
+        <GalleryItem label="live: counts 0:14 down to 'Trying again…' with a real clock, then Restart">
+          <View style={[styles.frame, { borderColor: colors['border/default'], height: FRAME_HEIGHT_TALL }]}>
+            <OverloadedState
+              secondsUntilRetry={retrySeconds}
+              onRetry={() => setRetryClock(startHoldClock(OVERLOADED_DEMO_MS, readClock()))}
+            />
+          </View>
+          <Text variant="caption" color="text/secondary">
+            Try again now restarts the demo countdown.
+          </Text>
+        </GalleryItem>
+      </GalleryGroup>
+
+      <GalleryGroup
+        name="WaitingRoomView"
+        note="Figma 'Booking / Waiting room' (56:6729). Position only, never a time (D4). The note says 'Keep Matinee open', a deliberate change from Figma's 'You can lock your phone; we'll tell you', because the app sends no push. For 1.3x text, set the system font size to 1.3 and look: type scales and the middle scrolls so the button stays reachable. Light and dark: use the chips at the top."
+      >
+        <GalleryItem label="default: 128 people ahead">
+          <View style={[styles.frame, { borderColor: colors['border/default'], height: FRAME_HEIGHT_SCREEN }]}>
+            <WaitingRoomView
+              ahead={128}
+              title={MOCK_WAITING_ROOM.title}
+              showing={MOCK_WAITING_ROOM.showing}
+              onLeave={() => setLastAction('Leave the queue')}
+            />
+          </View>
+        </GalleryItem>
+        <GalleryItem label="one person ahead (singular), no film known (a deep link)">
+          <View style={[styles.frame, { borderColor: colors['border/default'], height: FRAME_HEIGHT_SCREEN }]}>
+            <WaitingRoomView ahead={1} onLeave={() => setLastAction('Leave the queue')} />
+          </View>
+        </GalleryItem>
+        <GalleryItem label="next: nobody ahead (no Figma frame, same type tokens)">
+          <View style={[styles.frame, { borderColor: colors['border/default'], height: FRAME_HEIGHT_SCREEN }]}>
+            <WaitingRoomView
+              ahead={0}
+              title={MOCK_WAITING_ROOM.title}
+              showing={MOCK_WAITING_ROOM.showing}
+              onLeave={() => setLastAction('Leave the queue')}
+            />
+          </View>
+        </GalleryItem>
+        <GalleryItem label="stale: the last refresh failed, so the number may be old">
+          <View style={[styles.frame, { borderColor: colors['border/default'], height: FRAME_HEIGHT_SCREEN }]}>
+            <WaitingRoomView
+              ahead={42}
+              stale
+              title={MOCK_WAITING_ROOM.title}
+              showing={MOCK_WAITING_ROOM.showing}
+              onLeave={() => setLastAction('Leave the queue')}
+            />
+          </View>
+        </GalleryItem>
+        <GalleryItem label="skeleton: the join has not answered yet">
+          <View style={[styles.frame, { borderColor: colors['border/default'], height: FRAME_HEIGHT_SCREEN }]}>
+            <WaitingRoomView loading onLeave={() => setLastAction('Leave the queue')} />
+          </View>
+        </GalleryItem>
       </GalleryGroup>
     </>
   );

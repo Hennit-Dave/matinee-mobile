@@ -1,0 +1,40 @@
+BEFORE: how the app behaves against a server with the waiting room ON (traffic slice 5d, mobile)
+
+App code:    matinee-mobile main at f54503c (nothing changed yet; the app has no waiting room and no overload countdown)
+Server:      matinee-server main at 0f4f92f (PR #25 hold caps and PR #26 waiting room + load shedding, both merged), run locally
+             with a stub movie source over a throwaway Postgres 16 (54329) and Redis (6391), the waiting room ON with room for
+             1 active user. Dave's own Postgres, Redis, API and Metro were not touched.
+Probe:       docs/evidence/traffic-5d/before-probe.ts. It calls the app's own functions (fetchShowtimeSeats, acquireHold,
+             classifyHoldError, releaseHold, resolveSeatsViewStatus) against that server. Nothing is mocked except D, which
+             replays one 503 the way the server's load shedder sends it.
+
+typecheck: clean    lint: clean    tests: 302 passed, 0 failed (the 5c suite)
+
+A. GET /showtimes/:id/seats with no pass (the current app never joins the line)
+   what the app sees:       {"status":403,"kind":"waiting_room_required","retryable":false,"retryAfterSeconds":null,"message":"Join the waiting room before choosing seats for this showing."}
+   the seat screen shows:   status "error" -> the "Couldn't load seats" EmptyState with the server's raw sentence and a Try again that fails the same way
+
+B. POST /holds with no pass
+   what the app sees:       {"status":403,"kind":"waiting_room_required","retryable":false,"retryAfterSeconds":null,"message":"Join the waiting room before choosing seats for this showing."}
+   classifyHoldError says:  {"kind":"rejected","message":"Join the waiting room before choosing seats for this showing.","maybeHeld":false}
+
+C. a pass, then 8 seats held, then a 9th seat (the per-install hold cap)
+   8 seats:                 held
+   the 9th seat, the app sees: {"status":409,"kind":"hold_limit_reached","retryable":false,"retryAfterSeconds":null,"message":"The most seats that can be held for this showing have already been taken."}
+   classifyHoldError says:  {"kind":"rejected","message":"The most seats that can be held for this showing have already been taken.","maybeHeld":false}
+   (a Toast with the server's raw sentence, not "You can hold up to 8 seats for one showing")
+
+D. a shed request (503 server_busy with Retry-After 12) as the app reads it
+   classifyHoldError says:  {"kind":"uncertain","maybeHeld":true}
+   seat map status:         "server_overloaded" (the plain "Server overloaded" EmptyState: no countdown, nothing retries by itself)
+   stale-map rule applies:  false
+
+Device (Pixel_10a emulator, Expo Go, light): before-seats-403-light.jpg
+   The seat screen opened by deep link against that server. The map never loads: "Couldn't load seats" and the server's raw
+   sentence "Join the waiting room before choosing seats for this showing.", with a Try again button. Try again sends the same
+   request without a pass, so it fails the same way. The server log shows the polling requests answered 403 waiting_room_required
+   (route /showtimes/:id/seats, 02:11:17, 02:13:32, 02:13:44, 02:14:04). There is no way for a person to get a seat.
+
+What this means: with WAITING_ROOM_ENABLED=true the shipped app cannot book at all, and a shed 503 gets a dead-end screen with no
+countdown. The mobile PR builds the waiting room view, the join/poll/leave flow, the overload state with a countdown to the
+server's Retry-After, and the hold-limit message.

@@ -16,12 +16,14 @@ export type IconName =
   | 'ticket'
   | 'user';
 
-export type IconSize = 'sm' | 'md' | 'lg';
+export type IconSize = 'sm' | 'md' | 'lg' | 'xl';
 
 const SIZE_MAP: Record<IconSize, number> = {
   sm: primitives['size/icon-sm'],
   md: primitives['size/icon-md'],
   lg: primitives['size/icon-lg'],
+  // Figma's system states (107:15558) draw the info icon at 48, twice `lg`: the same glyph on a 48 grid, no new token.
+  xl: primitives['space/12'],
 };
 
 // Shared stroke style for the icons whose geometry comes straight from the Figma `Icons` frame (17:2).

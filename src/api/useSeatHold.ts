@@ -4,21 +4,7 @@ import { getClientId } from './clientIdNative';
 import { readClock } from './holdClock';
 import { createHoldController, type HoldController, type HoldState } from './holdMachine';
 import { acquireHold, releaseHold } from './holds';
-import { MovieApiError } from './movies';
-import { safeReadBaseUrl } from './useMovies';
-
-/** The base URL, or an error the controller reads as "refused, nothing held" (a missing setting is not a hold). */
-function requireBaseUrl(): string {
-  const { baseUrl, configError } = safeReadBaseUrl();
-  if (baseUrl === null) {
-    throw new MovieApiError(configError?.message ?? 'The API address is not set.', {
-      status: 0,
-      kind: 'validation_failed',
-      retryable: false,
-    });
-  }
-  return baseUrl;
-}
+import { requireBaseUrl } from './requireBaseUrl';
 
 export interface UseSeatHoldResult {
   state: HoldState;

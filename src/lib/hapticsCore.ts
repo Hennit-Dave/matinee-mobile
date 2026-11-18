@@ -12,6 +12,8 @@ export interface HapticBackend {
   impactLight(): Promise<void> | void;
   /** A "that didn't work" buzz, for a refused action. */
   warning(): Promise<void> | void;
+  /** A "that worked" pulse, for a moment the person was waiting for (a turn in the waiting room). */
+  success(): Promise<void> | void;
 }
 
 /**
@@ -22,6 +24,7 @@ export interface Haptics {
   selection(): void;
   impactLight(): void;
   warning(): void;
+  success(): void;
 }
 
 function isThenable(value: unknown): value is PromiseLike<unknown> {
@@ -52,5 +55,6 @@ export function createHaptics(backend: HapticBackend | null): Haptics {
     selection: run('selection'),
     impactLight: run('impactLight'),
     warning: run('warning'),
+    success: run('success'),
   };
 }

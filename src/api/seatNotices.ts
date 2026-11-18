@@ -1,5 +1,6 @@
 import { selectedSeatNames, takenSeatsMessage } from '../components/seatMapLogic';
 import type { HoldOutcome } from './holdMachine';
+import type { HoldLimit } from './movies';
 import type { ShowtimeSeatRow } from './seats';
 
 /**
@@ -13,9 +14,11 @@ import type { ShowtimeSeatRow } from './seats';
  */
 export interface SeatNoticeDraft {
   message: string;
-  tone: 'info' | 'error';
+  tone: 'info' | 'success' | 'error';
   /** A warning buzz: used when seats the user wanted were lost, like the seat-cap refusal. */
   haptic: boolean;
+  /** A success pulse instead: the moment the person was waiting for (their turn in the waiting room). */
+  success?: boolean;
   /** Offer a "Try again" action that asks for the hold again. */
   retry: boolean;
   /** Refresh the map straight away (a refusal means the map on screen is out of date). */
@@ -25,6 +28,13 @@ export interface SeatNoticeDraft {
 export interface SeatNotice extends SeatNoticeDraft {
   /** Rises with each notice, so a screen that renders the same state twice shows it once. */
   id: number;
+}
+
+/** The waiting room let the person in after they stood in the line: a success pulse and a short Toast. No Figma frame. */
+export const YOUR_TURN_MESSAGE = 'Your turn';
+
+export function yourTurnNotice(): SeatNoticeDraft {
+  return { message: YOUR_TURN_MESSAGE, tone: 'success', haptic: false, success: true, retry: false, refetch: false };
 }
 
 /** A refresh showed that seats picked earlier are now held or sold by someone else (Figma 57:7594). */
@@ -38,8 +48,15 @@ export function lostPicksNotice(rows: readonly ShowtimeSeatRow[], lostIds: reado
   };
 }
 
-/** What the hold flow refused or could not finish. `rows` is the map on screen, used to turn seat ids into names. */
-export function holdOutcomeNotice(outcome: HoldOutcome, rows: readonly ShowtimeSeatRow[] | undefined): SeatNoticeDraft {
+/**
+ * What the hold flow refused or could not finish, or `null` when the screen should say nothing. `rows` is the map on
+ * screen, used to turn seat ids into names.
+ *
+ * `needsPass` is the silent one: the pass lapsed (the app was in the background, the room was reset), so the screen
+ * quietly joins the line again and asks for the hold once it is let in. A Toast would only say "something went wrong"
+ * about a thing the app fixes by itself.
+ */
+export function holdOutcomeNotice(outcome: HoldOutcome, rows: readonly ShowtimeSeatRow[] | undefined): SeatNoticeDraft | null {
   switch (outcome.kind) {
     case 'taken':
       return {
@@ -68,6 +85,28 @@ export function holdOutcomeNotice(outcome: HoldOutcome, rows: readonly ShowtimeS
         retry: true,
         refetch: false,
       };
+    case 'busy':
+      // 503 server_busy: the server is shedding load. Not the person's doing and not an error in the app's eyes:
+      // the calm tone, the picks kept, and Try again waits out Retry-After (holdMachine.ts) instead of being refused again.
+      return {
+        message: BUSY_MESSAGE,
+        tone: 'info',
+        haptic: false,
+        retry: true,
+        refetch: false,
+      };
+    case 'needsPass':
+      return null;
+    case 'limitReached':
+      // 409 hold_limit_reached. The same warning buzz and calm tone as the on-device seat cap, because it is the same
+      // kind of "no": more seats than one showing allows. Waiting does not help, so no Try again.
+      return {
+        message: holdLimitMessage(outcome.holdLimit),
+        tone: 'info',
+        haptic: true,
+        retry: false,
+        refetch: false,
+      };
     case 'uncertain':
       return {
         message: "Couldn't confirm your hold. Try again.",
@@ -86,6 +125,19 @@ export function holdOutcomeNotice(outcome: HoldOutcome, rows: readonly ShowtimeS
       };
   }
 }
+
+/**
+ * A 409 `hold_limit_reached` (ADR 0018). The number comes from the server's answer, never from the app: the owner cap is
+ * 8 and the address cap 16 today, and a deploy can change either. With no usable number the sentence names none.
+ */
+export function holdLimitMessage(holdLimit: HoldLimit | null): string {
+  if (!holdLimit) return "You've reached the most seats you can hold for one showing.";
+  if (holdLimit.scope === 'address') return 'Too many seats are held from this connection for one showing.';
+  return `You can hold up to ${holdLimit.limit} ${holdLimit.limit === 1 ? 'seat' : 'seats'} for one showing.`;
+}
+
+/** 503 `server_busy` on a hold. No Figma frame: the existing `Toast` with its Try again action. */
+export const BUSY_MESSAGE = "We're very busy right now. Try again in a moment.";
 
 /** Too many holds in a minute (429). No Figma frame: the existing `Toast` with its Try again action. */
 export const RATE_LIMITED_MESSAGE = 'Slow down a moment, then try again.';

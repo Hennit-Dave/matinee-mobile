@@ -11,6 +11,7 @@ export { Icon, type IconName, type IconProps, type IconSize } from './Icon';
 export { Input, type InputProps } from './Input';
 export { LiveCountdown, type LiveCountdownProps } from './LiveCountdown';
 export { NavBar, type NavBarProps } from './NavBar';
+export { OverloadedState, type OverloadedStateProps } from './OverloadedState';
 export { NAV_ITEMS, type NavItemKey } from './navBarLogic';
 export { MovieCard, type MovieCardLayout, type MovieCardProps } from './MovieCard';
 export { SearchResultRow, type SearchResultRowProps } from './SearchResultRow';
@@ -23,3 +24,4 @@ export { Toast, type ToastAction, type ToastProps, type ToastTone } from './Toas
 export { ToastProvider, useToast, type ShowToastOptions } from './ToastProvider';
 export { useNavBarClearance } from './useNavBarClearance';
 export { useReduceTransparency } from './useReduceTransparency';
+export { WaitingRoomView, type WaitingRoomViewProps } from './WaitingRoomView';

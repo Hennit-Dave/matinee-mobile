@@ -1,0 +1,163 @@
+MUTATION CHECKS: can the new tests fail?  (traffic slice 5d, mobile)
+
+FIRST RUN (suite of 420): 21 of 23 caught. Two findings, both fixed before this run (commit "test(waiting-room): cover a manual retry after a busy poll, and fail a missing timeout loudly"):
+  M13 survived: breaking the manual "Try again now" so it JOINS instead of polling went unnoticed. A join would lose the person's place, and no test pressed the
+      button after a busy POLL (only after a busy join). A test for it was added.
+  M18 hung: removing the request timeout made the timeout test wait on a promise that never settles, so the run stopped at the 90 s limit instead of failing.
+      The test now races the request against a 2 s deadline, so a missing abort is a clear failure.
+THIS RUN (suite of 421), below, is the final one.
+
+Each entry breaks the code in one specific way, runs the whole suite (npm test), and restores the file.
+Counts are distinct failing tests out of the 421 in the suite. The script is in the scratchpad, not committed (it edits one file, runs npm test, restores it).
+CAUGHT means the suite went red and names the tests that noticed. Every file is restored and the suite is re-run green at the end.
+
+M1 the queue guard accepts a negative number of people ahead
+   file: src/api/waitingRoom.ts
+   CAUGHT: 1 failing test(s) of 421
+     - isQueueState rejects every field being wrong, so nothing nonsensical is drawn or used as a timer
+
+M2 a poll delay from the server is not floored (a 1 ms answer makes the phone hammer the server)
+   file: src/api/waitingRoom.ts
+   CAUGHT: 2 failing test(s) of 421
+     - the server number is bounded before the jitter: never faster than 1 s, never slower than 30 s
+     - a poll delay from the server that is absurdly small is raised, so the phone cannot hammer the server
+
+M3 no jitter: everyone who joined together asks in the same instant
+   file: src/api/waitingRoom.ts
+   CAUGHT: 6 failing test(s) of 421
+     - the poll delay is the server number plus or minus 20 percent, from a random draw
+     - a draw outside 0..1 is clamped, so a bad random source cannot move the delay outside the jitter band
+     - two people with the same server number do not ask at the same moment
+     - the wait is jittered by the random draw, inside plus or minus 20 percent
+     - a poll delay from the server that is absurdly small is raised, so the phone cannot hammer the server
+     ... and 1 more
+
+M4 a missing pass (403) is classified as 'maybe held', so leaving would send a pointless release
+   file: src/api/holds.ts
+   CAUGHT: 3 failing test(s) of 421
+     - 403 needsPass means nothing is held: leaving sends NO release
+     - 403 waiting_room_required on a hold: needsPass, and nothing is held
+     - a shed hold is cautious like a 503 and the opposite of a 429 or a missing pass on "could the seats be held?"
+
+M5 the hold-limit Toast hardcodes 8 instead of the server's number
+   file: src/api/seatNotices.ts
+   CAUGHT: 1 failing test(s) of 421
+     - hold_limit_reached never says a number the server did not send
+
+M6 a shed hold (server_busy) does not wait out Retry-After before the next try
+   file: src/api/holdMachine.ts
+   CAUGHT: 3 failing test(s) of 421
+     - 503 server_busy: idle with a busy outcome, and the NEXT attempt waits out the jittered Retry-After
+     - server_busy without a Retry-After falls back to 2 s
+     - leaving while waiting out a server_busy cancels the wait and still releases what it may have left
+
+M7 the machine keeps THREE failed polls quiet instead of two
+   file: src/api/waitingRoomMachine.ts
+   CAUGHT: 8 failing test(s) of 421
+     - two failed polls keep the place on screen, marked out of date; the third is shown
+     - a first join that fails without an answer is retried quietly twice, and the third is shown with Try again
+     - a request that timed out (an AbortError) is no answer like any other: kept quiet twice, then shown
+     - a busy answer to a POLL in a line is kept quiet twice, waiting out Retry-After each time, and shown the third time
+     - "Try again now" after a busy POLL asks about the place; it does not join again, which would lose it
+     ... and 3 more
+
+M8 going to the background does not stop the polling
+   file: src/api/waitingRoomMachine.ts
+   CAUGHT: 2 failing test(s) of 421
+     - in the background it asks for nothing, and on return it asks at once
+     - a busy screen keeps its countdown through a spell in the background: only what is left is waited
+
+M9 coming back to the foreground does not refresh at once
+   file: src/api/waitingRoomMachine.ts
+   CAUGHT: 5 failing test(s) of 421
+     - in the background it asks for nothing, and on return it asks at once
+     - coming back twice, or while a poll is already running, sends one request
+     - an answer that lands while paused is applied, but the next poll waits for the app to return
+     - admitted while the app was in the background is shown on return
+     - a busy screen whose time ran out in the background tries at once on return
+
+M10 being let in after waiting is not told apart from being let straight in (no 'Your turn')
+   file: src/api/waitingRoomMachine.ts
+   CAUGHT: 4 failing test(s) of 421
+     - the line moves: each poll updates the place, then being let in says it was a turn after waiting
+     - admitted while the app was in the background is shown on return
+     - the line is no longer empty when we rejoin: the screen then moves to the waiting view, and being let in is a turn
+     - a poll that says not_queued and then a free room admits them, and they did wait
+
+M11 leaving while the join is in flight does not give back what the join took
+   file: src/api/waitingRoomMachine.ts
+   CAUGHT: 2 failing test(s) of 421
+     - leaving while the join is in flight waits for the answer, then gives back whatever it took
+     - a join that lands AFTER the screen has gone is given straight back, and the state does not move
+
+M12 a poll that says not_queued (place lost) does not join again
+   file: src/api/waitingRoomMachine.ts
+   CAUGHT: 2 failing test(s) of 421
+     - a poll that says not_queued (the place was lost) rejoins quietly: the old place stays on screen until the join answers
+     - a poll that says not_queued and then a free room admits them, and they did wait
+
+M13 after the busy screen the machine JOINS again instead of polling (loses the place)
+   file: src/api/waitingRoomMachine.ts
+   CAUGHT: 1 failing test(s) of 421
+     - "Try again now" after a busy POLL asks about the place; it does not join again, which would lose it
+
+M14 the busy countdown ignores the server's Retry-After (always the 2 s fallback)
+   file: src/api/waitingRoomMachine.ts
+   CAUGHT: 7 failing test(s) of 421
+     - a busy server answering the JOIN is shown at once, with a countdown seeded from Retry-After
+     - when the countdown ends it tries again by itself, and a good answer leaves the busy screen
+     - "Try again now" does not wait for the countdown, and a busy answer again starts a fresh countdown
+     - a full waiting room is shown the same way
+     - too many requests
+     ... and 2 more
+
+M15 a JOIN that answers not_queued is trusted instead of counted as a failed try
+   file: src/api/waitingRoomMachine.ts
+   CAUGHT: 1 failing test(s) of 421
+     - a JOIN that answers not_queued cannot be right: it is counted as a failed try, not trusted
+
+M16 a 429 on the queue is not treated like 'very busy'
+   file: src/api/waitingRoomMachine.ts
+   CAUGHT: 1 failing test(s) of 421
+     - too many requests
+
+M17 a showing that does not exist keeps being retried instead of shown
+   file: src/api/waitingRoomMachine.ts
+   CAUGHT: 3 failing test(s) of 421
+     - a showing that does not exist is shown at once, with no retry scheduled
+     - an answer the app cannot read is shown at once and is not retried by itself
+     - after the busy screen, a dead end from the retry is shown as such
+
+M18 the request timeout never aborts (a hung poll hangs for ever)
+   file: src/api/waitingRoom.ts
+   CAUGHT: 1 failing test(s) of 421
+     - a poll that is never answered fails once its time is up, instead of hanging for ever
+
+M19 the request timeout is not cleared when the answer arrives
+   file: src/api/waitingRoom.ts
+   CAUGHT: 1 failing test(s) of 421
+     - an answer that arrives in time is returned, and the timer does not fire afterwards
+
+M20 a 403 on the seat map is shown as an error, not as a quiet re-join
+   file: src/api/seats.ts
+   CAUGHT: 1 failing test(s) of 421
+     - a 403 from the seat map is shown as loading while the screen joins again, not as an error
+
+M21 the Your turn notice buzzes like a refusal instead of pulsing a success
+   file: src/api/seatNotices.ts
+   CAUGHT: 1 failing test(s) of 421
+     - being let in after waiting: a short success Toast with its own pulse (not the warning buzz), nothing to retry or refresh
+
+M22 the waiting note promises a notification the app cannot send
+   file: src/components/waitingRoomLogic.ts
+   CAUGHT: 2 failing test(s) of 421
+     - no word on the waiting room promises a time or a notification
+     - the note is the deliberate deviation from Figma: keep the app open, move them the moment it is their turn
+
+M23 one person ahead reads as 'people'
+   file: src/components/waitingRoomLogic.ts
+   CAUGHT: 1 failing test(s) of 421
+     - the place in the line is a number and a label, never a time
+
+23 of 23 caught.
+After restoring every file: 421 tests, 421 passed, 0 failed.

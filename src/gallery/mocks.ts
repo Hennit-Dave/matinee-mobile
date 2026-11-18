@@ -26,3 +26,9 @@ export const MOCK_TOASTS = {
   error: 'Payment failed.',
   long: 'We could not reach the server, so your seats were not held. Check your connection and try again.',
 } as const;
+
+/** The showing on the waiting-room frames (Figma 56:6607). */
+export const MOCK_WAITING_ROOM = {
+  title: 'The Lantern Road',
+  showing: 'Sat 14 Nov · 20:00 · IMAX',
+} as const;

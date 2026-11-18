@@ -1,0 +1,74 @@
+AFTER: how the app handles the waiting room, the busy server and the hold cap (traffic slice 5d, mobile)
+
+App code:    branch feat/waiting-room-mobile, on top of matinee-mobile main at f54503c
+Server:      matinee-server main at 0f4f92f (PRs #25 and #26), run locally with a stub movie source over a throwaway Postgres 16 (54329) and Redis (6391).
+             Waiting room ON for ONE active install, one admission every 2 s, load shedding at 3 requests in flight. Dave's own Postgres, Redis, API and Metro
+             were not touched.
+Probe:       docs/evidence/traffic-5d/after-probe.ts. It runs the app's real queue machine (waitingRoomMachine.ts) with real timers and the real fetch, and the
+             app's own classification and notice code. Nothing is mocked. Section E needs the server to be saturated by the caller (see below).
+Compare:     before.txt asked the same questions of the app as it was on main; every answer there was a dead end.
+
+typecheck: clean    lint: clean    tests: 421 passed, 0 failed (302 on main + 119 new)    gitleaks: no leaks in the 8 commits of the branch
+
+A. the seat screen opens on an empty room
+   +  0.0s  screen: phase joining
+   +  0.0s  screen: phase admitted, admission #1 (straight in)
+   +  0.1s  seat map loaded with the pass: 10 rows (before: 403 waiting_room_required, "Couldn't load seats")
+
+B. the room is full: 1 install inside and 2 waiting ahead of us
+   +  0.4s  screen: phase joining
+   +  0.4s  screen: phase waiting, ahead 2
+   +  3.5s  screen: phase waiting, ahead 1
+   +  6.9s  screen: phase waiting, ahead 0
+   +  9.7s  screen: phase admitted, admission #1 (after waiting: "Your turn")
+   +  9.8s  let in after waiting: true
+
+C. the pass is lost, then Continue is pressed (the hold is refused, the screen re-joins, the hold is taken)
+   +  9.8s  Continue answered: 403 waiting_room_required; classifyHoldError says {"kind":"needsPass","maybeHeld":false}
+   +  9.8s  notice shown for it: null (none: it is fixed silently)
+   +  9.8s  isWaitingRoomRequiredError: true
+   +  9.8s  screen: phase admitted, rejoining, admission #1 (after waiting: "Your turn")
+   +  9.8s  screen: phase admitted, admission #2 (straight in)
+   + 10.0s  the hold, asked again once re-admitted: held 2 seats, 600 s left
+
+D. the 9th seat (the per-install hold cap)
+   + 10.0s  the app sees: 409 hold_limit_reached, holdLimit {"scope":"owner","limit":8,"held":8}
+   + 10.0s  classifyHoldError says: {"kind":"limitReached","holdLimit":{"scope":"owner","limit":8,"held":8},"maybeHeld":false}
+   + 10.0s  the Toast: {"message":"You can hold up to 8 seats for one showing.","tone":"info","haptic":true,"retry":false,"refetch":false}
+
+E. the server is saturated (503 server_busy on every request) when the screen opens, and is let go after about 16 s
+   +  0.0s  screen: phase joining
+   +  0.0s  screen: phase busy, countdown 13s
+   + 13.0s  screen: phase busy, countdown 0s, retrying
+   + 13.0s  screen: phase busy, countdown 5s
+   + 18.0s  screen: phase busy, countdown 0s, retrying
+   + 18.0s  screen: phase admitted, admission #1 (straight in)
+   + 18.1s  recovered by itself, with no tap: true
+   The server was saturated by three searches that never answer (a stub in my scratch copy of main.ts), which hold all 3 in-flight slots; the real shedder
+   then answered every other request 503 server_busy with a Retry-After of 5 to 15 s. It was let go about 16 s in. The first countdown (13 s) and the second
+   (5 s) are the server's own jittered values. The machine went back to JOINING (no place yet), and was admitted the moment the server could answer.
+
+Per-commit check (each commit checked out on its own in a throwaway worktree):
+26e2b19  test(waiting-room): baseline for the waiting room, hold cap and overload states
+    typecheck: clean   lint: clean   tests: tests 302 pass 302 fail 0 
+566c6a5  feat(waiting-room): mirror the queue contract and the new hold errors
+    typecheck: clean   lint: clean   tests: tests 348 pass 348 fail 0 
+1c78621  feat(waiting-room): the queue machine, its hook and a success haptic
+    typecheck: clean   lint: clean   tests: tests 403 pass 403 fail 0 
+6ca04b6  feat(waiting-room): WaitingRoomView and OverloadedState, with gallery entries and docs
+    typecheck: clean   lint: clean   tests: tests 411 pass 411 fail 0 
+67c5d17  fix(waiting-room): give every queue call a timeout
+    typecheck: clean   lint: clean   tests: tests 416 pass 416 fail 0 
+b4cbbd0  feat(waiting-room): gate the seat screen behind the queue
+    typecheck: clean   lint: clean   tests: tests 420 pass 420 fail 0 
+6a0ba13  test(waiting-room): cover a manual retry after a busy poll, and fail a missing timeout loudly
+    typecheck: clean   lint: clean   tests: tests 421 pass 421 fail 0 
+
+What this shows against before.txt:
+   A  before: the seat map answered 403 and the screen was "Couldn't load seats".   after: joined, let straight in, the map loads.
+   B  before: no way to wait in a line.   after: "ahead 2, 1, 0" at the server's pace, then admitted "after waiting" (the "Your turn" moment).
+   C  before: a hold with no pass was a plain rejection with the server's raw sentence.   after: classified `needsPass` (nothing held), no Toast, the screen
+      joins again, and the hold is taken (2 seats, 600 s left).
+   D  before: the 9th seat showed the server's raw sentence.   after: `limitReached` with the server's own numbers and "You can hold up to 8 seats for one showing."
+   E  before: a shed 503 was a plain EmptyState with no countdown and nothing retried by itself.   after: a busy countdown from Retry-After, automatic retries,
+      recovery with no tap.
