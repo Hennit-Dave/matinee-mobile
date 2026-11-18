@@ -304,10 +304,41 @@ Rules that apply to every component:
 
 ### EmptyState
 - **Figma:** `EmptyState` (`19:21`). **Code:** `EmptyState`.
-- **Props:** `headline: string`, `body: string`, `actionLabel: string`, `onAction`.
-- **Tokens:** `type/title-lg` headline (Newsreader), `type/body-lg` body, `text/primary`, `text/secondary`, `Button` primary inside, `space/2`, `space/3`, `space/6`, `space/8`.
+- **Props:** `headline: string`, `body: string`, `actionLabel: string`, `onAction`. Optional: `icon` (`info` or `error`), `iconSize` (`lg` 24 by default, `xl` 48 for the overloaded state), `actionLoading` (the Button's own loading dots, width kept, presses ignored), `secondaryActionLabel` + `onSecondaryAction`, `footnote` (a quiet caption under the actions, like "Trying again in 0:14").
+- **Tokens:** `type/title-lg` headline (Newsreader), `type/body-lg` body, `type/caption` footnote, `text/primary`, `text/secondary`, `Button` primary inside, `space/2`, `space/3`, `space/6`, `space/8`.
 - **System layout:** the same component with an `Icon` above it (Info in `status/info`, or Error in `status/error` for server errors). Used for No internet, Server error, Maintenance, Update required, Session expired and the Notification primer.
 - **Rules:** exactly one action in the component. A second, quieter action ("Open saved tickets", "Not now") is a `Button` text variant placed below it.
+
+### OverloadedState
+- **Figma:** `System / Server overloaded` (`107:15558` light, `107:15536` dark). **Code:** `OverloadedState`, built from `EmptyState`.
+- **Props:** `secondsUntilRetry: number`, `retrying?: boolean`, `onRetry`.
+- **Draws:** the info icon at 48 (`status/info`), "We're very busy right now", "Lots of people are booking at once. You haven't been charged. We'll try again for you.", a primary **Try again now**, and under it "Trying again in 0:14" (`type/caption`, `text/secondary`), counted down from the server's `Retry-After`. At zero, and while a try is in flight, the caption reads "Trying again…" and the button shows its loading dots.
+- **Rules:**
+  - **Booking funnel only** (traffic slice 5d, D8): the seat screen and the waiting room, where the app retries for the person and nothing has been charged. Home, Search and a film's detail keep the plain `EmptyState` with its manual Try again.
+  - **Presentational.** It draws the seconds it is given. `useClockSeconds` (`src/api/useClockSeconds.ts`) counts them from a `HoldClock`, with the same clock rules as the seat-hold countdown (seeded from a duration, never longer than it should be after a sleep, rounded up). The caption is not a live region, so a screen reader is not told every second.
+  - Copy lives in `src/components/waitingRoomLogic.ts` and is unit-tested.
+- **Built (waiting-room slice).** Code: `src/components/OverloadedState.tsx`.
+
+### WaitingRoomView
+- **Figma:** `Booking / Waiting room` (`56:6729`): Default light `56:6607`, dark `56:6586`; Skeleton light `56:6691`, dark `56:6674`; 1.3x text dark `56:6708`. **Code:** `WaitingRoomView`.
+- **Props:** `loading?`, `ahead?: number`, `stale?`, `title?`, `showing?`, `onLeave`.
+- **Draws:** the film and showing (when known), "You're in the queue", the number of people ahead in `type/numeral` with tabular figures and "people ahead of you" under it, a freshness line, a note, and a text-variant **Leave the queue** at the foot. `loading` draws the Figma skeleton: bars sized as sums of tokens, no spinner.
+- **States:**
+
+| State | Shows |
+|---|---|
+| Default | the number and "people ahead of you" (one person: "person ahead of you") |
+| Next | `ahead = 0`: "You're next" in `type/title-lg` in place of the number. **No Figma frame**: built from the same type tokens |
+| Stale | `stale`: the freshness line reads "Trying to update…" instead of "Updated just now", because the last refresh failed and the number may be old |
+| Skeleton | `loading`: the join has not answered yet |
+| 1.3x text | no prop: type scales with the system setting, and the middle scrolls so the button stays reachable |
+
+- **Rules:**
+  - **Position only, never a time** (D4, ADR 0017). The line's speed is not known well enough to promise one; nothing in the component or its copy mentions minutes or an estimate, and a test checks it.
+  - **Deliberate deviation from Figma:** the note says "Your place is held. Keep Matinee open and we'll move you the moment it's your turn." Figma says "You can lock your phone; we'll tell you when it's your turn", which promises a push notification the app does not send (it needs a new native module and a server job; a later enhancement).
+  - A screen reader hears one sentence for the place ("128 people ahead of you", or "You're next"), announced politely when it changes. The film and showing read as a header.
+  - **Presentational.** The line itself (joining, polling, pausing, re-joining, leaving) lives in `src/api/waitingRoomMachine.ts` and is unit-tested without React Native; `useWaitingRoom` binds it to the screen.
+- **Built (waiting-room slice).** Code: `src/components/WaitingRoomView.tsx`.
 
 ### CrossfadeStack
 - **Figma:** none. It is behaviour, not a visual: it swaps the slides of the Home featured hero (frame `40:1339`). **Code:** `CrossfadeStack`.
@@ -444,7 +475,7 @@ Rules that apply to every component:
 | `home`, `ticket`, `user` | NavBar |
 | `plus`, `minus` | Seat map zoom (**built**, seat-selection slice; geometry from the Figma `Icon/Plus` and `Icon/Minus` assets) |
 
-- Sizes `size/icon-sm` (16), `size/icon-md` (20), `size/icon-lg` (24). Colour comes from a semantic token passed in, never a raw hex.
+- Sizes `size/icon-sm` (16), `size/icon-md` (20), `size/icon-lg` (24), and `xl` (48, `space/12`) for the info icon of the overloaded state (Figma `107:15558`). Colour comes from a semantic token passed in, never a raw hex.
 - There are no offline, settings or wrench icons. System screens reuse `info` and `error` on purpose.
 
 ---
@@ -455,7 +486,7 @@ Rules that apply to every component:
 - `Chip` label for showtimes.
 - `Input` code digits.
 - Seat footer price and seats picked.
-- Waiting-room position (`type/numeral`).
+- Waiting-room position (`type/numeral`, **built**: `WaitingRoomView`).
 - Checkout price lines (tickets, service fee, total). The strings come from the server, finished.
 - Date, time and seats on Booking confirmed and Ticket detail.
 - Ticket code (for example `MTN-4829`).
@@ -491,9 +522,10 @@ Rules that apply to every component:
   haptics.selection();   // a light tick: a selection changed (a seat picked or dropped)
   haptics.impactLight(); // a light tap: a small control pressed
   haptics.warning();     // a refused action (the seat cap)
+  haptics.success();     // a moment the person was waiting for (their turn in the waiting room)
   ```
 
-  Every call is fire-and-forget (it returns nothing, never a promise) and safe: it does nothing on the web or where the native module is missing, and it swallows any thrown error or rejected promise, so it cannot crash a render, a handler or a test. The safety logic is in `hapticsCore.ts` and unit-tested without React Native. Use it for deliberate moments only, never on scroll, pan, pinch or render. `expo-haptics` is at Expo SDK 58's version and ships in Expo Go, so it needs no new native build. Today only the seat screen calls it.
+  Every call is fire-and-forget (it returns nothing, never a promise) and safe: it does nothing on the web or where the native module is missing, and it swallows any thrown error or rejected promise, so it cannot crash a render, a handler or a test. The safety logic is in `hapticsCore.ts` and unit-tested without React Native. Use it for deliberate moments only, never on scroll, pan, pinch or render. `expo-haptics` is at Expo SDK 58's version and ships in Expo Go, so it needs no new native build. Today only the seat screen calls it (the seat picks, the refusals, and a `success` pulse when the waiting room lets someone in).
 
 ---
 
@@ -507,4 +539,4 @@ The in-app living style guide required by RULES.md D3.4. Every component in the 
 - **Sections follow the Figma Gallery page (`73:3973`):** Typography, Buttons, Cards and posters, Selection and labels, Input, Feedback, Navigation and sheets, plus Icons, Seats and Motion for components Figma draws no gallery frame for.
 - **States that are not props** (pressed, focused) cannot be drawn statically, so the gallery says how to see them (press and hold a button, tap a field).
 - **Rule: a new component is not done until it is in the gallery.** `src/gallery/registry.test.ts` fails CI if a component is exported from `src/components/index.ts` without an entry in `GALLERY_SECTIONS`, or if a component is listed as planned after it has been built.
-- **Not built yet:** QRCode, Switch and ListRow are specified above and drawn in Figma but do not exist in code, so they are listed at the bottom of the gallery rather than shown. Move each into a section when it is built. (`Seat`, `SeatLegend` and `SeatMap` are in the Seats section, and `Countdown` and `LiveCountdown` are under Feedback.)
+- **Not built yet:** QRCode, Switch and ListRow are specified above and drawn in Figma but do not exist in code, so they are listed at the bottom of the gallery rather than shown. Move each into a section when it is built. (`Seat`, `SeatLegend` and `SeatMap` are in the Seats section, and `Countdown`, `LiveCountdown`, `EmptyState`, `OverloadedState` and `WaitingRoomView` are under Feedback.)
