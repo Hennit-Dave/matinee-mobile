@@ -41,3 +41,5 @@ The featured hero switches movies roughly every five seconds by fading the old p
 ## Slice 5b · Live seat holds — countdown and polling — 2026-11-17
 
 What clicked for me was that the seat map shows availability, but it does not guarantee a seat is still free. Polling keeps the display reasonably current, while the server checks on Continue and the database protects against double booking. I accepted a few seconds of delay for simpler infrastructure, then reduced unnecessary traffic by spreading polls 4–6 seconds apart and pausing them when the screen is not visible.
+
+What clicked for me was that PaymentSheet success is not a confirmed booking. The app shows “Confirming your payment…” and checks the server every two seconds while the verified webhook and background worker finish the booking, then shows either the QR ticket or the refund outcome. Opening checkout over the seat screen keeps that screen alive so its cleanup does not release the hold during payment. Reusing the idempotency key for the same checkout attempt makes cancelling and retrying safe, while an expired hold triggers a refund recorded alongside the charge in the ledger.
