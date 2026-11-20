@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { acquireCheckout, checkoutFailureMessage, idempotencyKeyFor } from '../../../api/checkout';
 import { getClientId } from '../../../api/clientIdNative';
+import { refundReasonCopy } from '../../../api/refundCopy';
 import { usePaymentConfirmation } from '../../../api/usePaymentConfirmation';
 import { EmptyState, Icon, Skeleton, Text } from '../../../components';
 import * as haptics from '../../../lib/haptics';
@@ -44,7 +45,18 @@ export default function CheckoutScreen() {
   const [failure, setFailure] = useState<string | null>(null);
   const [total, setTotal] = useState<string | null>(null);
 
+  // The refund copy (and where its action goes) for the `refunded` state. Pure and null-safe: a non-refunded
+  // phase has a null reason, which resolves to the generic fallback and is never rendered.
+  const refund = refundReasonCopy(confirmation.refundReason);
+
   const goBack = useCallback(() => router.back(), [router]);
+
+  // A cancelled showing has no seat map to return to: dismiss the modal and the seat screen underneath, landing on
+  // the tabs (Home). A deep link with nothing to dismiss falls back to Home.
+  const goHome = useCallback(() => {
+    if (router.canDismiss()) router.dismissAll();
+    else router.replace('/');
+  }, [router]);
 
   const run = useCallback(async () => {
     if (!showtimeId || seatIds.length === 0 || !readStripePublishableKey()) {
@@ -170,10 +182,10 @@ export default function CheckoutScreen() {
       {phase === 'confirming' && confirmation.phase === 'refunded' ? (
         <EmptyState
           icon="info"
-          headline="Your seats were released"
-          body="Your payment has been refunded because the hold ran out. Pick different seats to try again."
-          actionLabel="Back to seats"
-          onAction={goBack}
+          headline={refund.headline}
+          body={refund.body}
+          actionLabel={refund.destination === 'seats' ? 'Back to seats' : 'Back to home'}
+          onAction={refund.destination === 'seats' ? goBack : goHome}
         />
       ) : null}
 

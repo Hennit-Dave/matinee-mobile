@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { getClientId } from '../../api/clientIdNative';
 import { MovieApiError } from '../../api/movies';
 import { fetchOrderStatus, type OrderStatusResponse } from '../../api/orderStatus';
+import { refundReasonCopy } from '../../api/refundCopy';
 import { requireBaseUrl } from '../../api/requireBaseUrl';
 import { formatTicketDate, formatTicketSeats } from '../../api/ticket';
 import { Card, EmptyState, Icon, Skeleton, Text } from '../../components';
@@ -59,6 +60,10 @@ export default function TicketScreen() {
   }, [router]);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
+
+  // A refunded order carries the server's reason; the non-succeeded state tailors its copy to it (e.g. a cancelled
+  // showing). A failed / still-pending order has no reason and keeps the generic "wasn't confirmed" line.
+  const refunded = ticket && ticket.status === 'refunded' ? refundReasonCopy(ticket.refundReason) : null;
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors['surface/default'] }]} edges={['top', 'bottom']}>
@@ -137,8 +142,8 @@ export default function TicketScreen() {
       {status === 'ready' && ticket && !ticket.ticket ? (
         <EmptyState
           icon="info"
-          headline="This booking isn't available"
-          body="It wasn't confirmed. If you were charged, your payment has been refunded."
+          headline={refunded ? refunded.headline : "This booking isn't available"}
+          body={refunded ? refunded.body : "It wasn't confirmed. If you were charged, your payment has been refunded."}
           actionLabel="Back to home"
           onAction={goBack}
         />
