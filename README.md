@@ -64,6 +64,7 @@ Every `EXPO_PUBLIC_*` variable is bundled into the app and readable by anyone.
 |---|---|
 | `EXPO_PUBLIC_API_URL` | The public address of the Matinee server. Not a secret. |
 | `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` | A Stripe **publishable** key (test mode). It identifies the Stripe account and cannot charge anyone; the secret key stays on the server. |
+| `EXPO_PUBLIC_SENTRY_DSN` | A Sentry DSN (ingestion endpoint + project id). It can only **send** events to this project, not read them; it holds no secret. |
 
 ## Seat holds, the install id and live seats
 
