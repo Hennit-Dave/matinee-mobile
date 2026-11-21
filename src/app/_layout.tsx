@@ -10,8 +10,13 @@ import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '../components';
+import { initSentry } from '../lib/initSentry';
 import { readStripePublishableKey } from '../lib/stripe';
 import { useTheme } from '../theme';
+
+// Error tracking (observability slice), as early as possible so crashes during startup are captured. Fail-safe:
+// without EXPO_PUBLIC_SENTRY_DSN this no-ops and the app still boots.
+initSentry();
 
 void SplashScreen.preventAutoHideAsync();
 
