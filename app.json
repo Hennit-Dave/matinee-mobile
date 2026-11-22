@@ -8,6 +8,7 @@
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "plugins": [
+      "./plugins/withReleaseLintDisabled.js",
       "expo-router",
       [
         "expo-secure-store",
