@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isTicketItem, isTicketsResponse, isUpcomingTicket, ticketBadge, type TicketItem } from './tickets';
+import { isTicketItem, isTicketsResponse, isUpcomingTicket, ticketBadge, ticketNote, type TicketItem } from './tickets';
 
 const NOW = Date.parse('2026-11-25T00:00:00.000Z');
 
@@ -42,4 +42,11 @@ test('ticketBadge maps status + time to the right word and tone', () => {
   assert.deepEqual(ticketBadge('succeeded', '2026-11-20T20:30:00.000Z', NOW), { label: 'Watched', tone: 'neutral' });
   assert.deepEqual(ticketBadge('refunded', '2026-12-01T20:30:00.000Z', NOW), { label: 'Refunded', tone: 'warning' });
   assert.deepEqual(ticketBadge('requires_payment', '2026-12-01T20:30:00.000Z', NOW), { label: 'Confirming', tone: 'info' });
+});
+
+test('ticketNote varies by status and is null for a watched (past, succeeded) ticket', () => {
+  assert.equal(ticketNote('refunded', '2026-12-01T20:30:00.000Z', NOW), 'Refund on its way');
+  assert.equal(ticketNote('requires_payment', '2026-12-01T20:30:00.000Z', NOW), 'Ticket appears here soon');
+  assert.equal(ticketNote('succeeded', '2026-12-01T20:30:00.000Z', NOW), 'Saved on this phone');
+  assert.equal(ticketNote('succeeded', '2026-11-20T20:30:00.000Z', NOW), null);
 });
