@@ -2,9 +2,14 @@
 
 Matinee is a cinema ticket booking app: browse movies, pick seats on a seat map, pay, get a QR ticket. Built with React Native and Expo.
 
-> GIF, Android download link and demo video link go here once they exist.
+![Matinee Home: featured film hero and Now playing / Popular carousels](docs/evidence/home-dynamic/02-home-popular-light.jpg)
 
-**Server repo:** https://github.com/Hennit-Dave/matinee-server
+<!-- TODO (Dave): swap in a GIF of the full booking flow when recorded. -->
+
+- **Android build (download):** https://expo.dev/accounts/hennit_dave/projects/matinee/builds/ef7c7345-80bd-43cf-a9bf-1d5f534817e7
+- **Demo video:** [demo video](https://lnkd.in/p/dM-k2isA)
+- **Server repo:** https://github.com/Hennit-Dave/matinee-server
+- **Payments run in Stripe test mode** — no real charges.
 
 ## Status
 
@@ -159,6 +164,20 @@ Checkout uses the **native Stripe PaymentSheet** (server: ADR 0019), then polls 
 
 Evidence: `docs/evidence/payments-p2/`.
 
+## In-app purchase rules (Apple App Store & Google Play)
+
+Matinee sells **cinema tickets**: a real-world service redeemed at the door, not digital content consumed inside the app. That distinction decides whether Apple's and Google's in-app-purchase systems apply.
+
+**Apple (App Store Review Guidelines).** IAP is required only for digital goods and services used within the app (Guideline 3.1.1). Physical goods and real-world services, event and cinema tickets explicitly included, must NOT use IAP and must use a different payment method (Guidelines 3.1.3(e) / 3.1.5(a)). So processing ticket payments through Stripe isn't just allowed, it's the required path; routing ticket sales through Apple IAP would get the app rejected.
+
+**Google (Play Payments policy).** Google Play Billing is required for in-app digital content, but physical goods and real-world services are exempt and must use an alternative processor. Cinema tickets are exempt, so Stripe is the correct processor.
+
+**What this means in production.** Ticket sales do NOT pay Apple's or Google's 15–30% commission. That applies to digital IAP, which Matinee neither uses nor is allowed to use. The only payment fee is Stripe's processing fee.
+
+**What would change this.** If Matinee ever sold something consumed only inside the app (a premium subscription unlocking features, or in-app credits spendable only in Matinee), that would be digital content and WOULD require Apple IAP / Google Play Billing. One-off tickets for a real-world screening keep us cleanly in the exempt lane.
+
+Payments currently run in **Stripe test mode**: no real charges.
+
 ## Docs
 
 - `AGENTS.md` — how AI agents work in this repo
@@ -166,7 +185,7 @@ Evidence: `docs/evidence/payments-p2/`.
 
 ## Still to write
 
-Problem it solves · how to run locally · architecture summary · key decisions · app store billing rules (Apple/Google in-app purchase) · what I'd do next
+Problem it solves · how to run locally · architecture summary · key decisions · what I'd do next
 
 ## Attribution
 
