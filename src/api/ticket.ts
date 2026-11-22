@@ -18,3 +18,12 @@ export function formatTicketDate(startsAt: string): string {
 export function formatTicketSeats(seats: readonly { row: string; number: number }[]): string {
   return seats.map((seat) => `${seat.row}${seat.number}`).join(', ');
 }
+
+/**
+ * A short, display-only reference ("MTN-XXXX"): 4 uppercase alphanumeric chars derived from the UUID. The QR and
+ * every lookup keep the FULL reference; this is for the screen's copy only.
+ */
+export function displayReference(reference: string): string {
+  const compact = reference.replaceAll('-', '').toUpperCase();
+  return `MTN-${compact.slice(0, 4)}`;
+}
