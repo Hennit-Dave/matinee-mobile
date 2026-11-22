@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Badge, Chip, Text } from '../../components';
+import { Badge, Chip, Icon, ListRow, Text } from '../../components';
 import { primitives } from '../../tokens/tokens';
+import { useTheme } from '../../theme';
 import { GalleryGroup, GalleryItem } from '../GalleryParts';
 import { MOCK_DATES, MOCK_SHOWTIMES, MOCK_TITLES } from '../mocks';
 
 const noop = () => {};
 
 export function SelectionSection() {
+  const { colors } = useTheme();
   const [date, setDate] = useState<string>(MOCK_DATES[0]);
   const [time, setTime] = useState<string>(MOCK_SHOWTIMES[1]);
 
@@ -83,6 +85,25 @@ export function SelectionSection() {
           </View>
         </GalleryItem>
       </GalleryGroup>
+
+      <GalleryGroup
+        name="ListRow"
+        note="A settings row, grouped in a bordered surface/raised container; the bottom hairline is hidden on the last row."
+      >
+        <GalleryItem label="a group with dividers and chevrons">
+          <View style={[styles.listGroup, { backgroundColor: colors['surface/raised'], borderColor: colors['border/default'] }]}>
+            <ListRow label="About Matinee" onPress={noop} />
+            <ListRow label="Open source licences" onPress={noop} />
+            <ListRow label="Help and support" onPress={noop} showDivider={false} />
+          </View>
+        </GalleryItem>
+
+        <GalleryItem label="a leading icon">
+          <View style={[styles.listGroup, { backgroundColor: colors['surface/raised'], borderColor: colors['border/default'] }]}>
+            <ListRow label="Notifications" leading={<Icon name="info" size="lg" color="text/secondary" />} onPress={noop} showDivider={false} />
+          </View>
+        </GalleryItem>
+      </GalleryGroup>
     </>
   );
 }
@@ -98,5 +119,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: primitives['space/3'],
+  },
+  listGroup: {
+    borderRadius: primitives['radius/lg'],
+    borderWidth: primitives['border-width/default'],
+    overflow: 'hidden',
   },
 });
