@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native';
-import { Icon, Logo, Text, type IconName, type IconProps, type IconSize } from '../../components';
+import { Icon, Logo, Text, TmdbAttribution, type IconName, type IconProps, type IconSize } from '../../components';
 import { primitives } from '../../tokens/tokens';
 import { GalleryGroup, GalleryItem, GalleryRow } from '../GalleryParts';
 
@@ -84,6 +84,15 @@ export function IconsSection() {
         <View style={styles.darkPanel}>
           <Logo variant="lockup-horizontal" color="neutral/0" />
         </View>
+      </GalleryItem>
+    </GalleryGroup>
+
+    <GalleryGroup
+      name="TmdbAttribution"
+      note="The official TMDB logo + the fixed disclaimer, on its own surface chip (never recoloured per theme)."
+    >
+      <GalleryItem label="Attribution block">
+        <TmdbAttribution />
       </GalleryItem>
     </GalleryGroup>
     </>

@@ -21,6 +21,7 @@ export { SeatLegend } from './SeatLegend';
 export { SeatMap, type SeatMapProps } from './SeatMap';
 export { Skeleton, type SkeletonProps, type SkeletonShape } from './Skeleton';
 export { Text, type TextProps, type TextVariant } from './Text';
+export { TmdbAttribution } from './TmdbAttribution';
 export { Toast, type ToastAction, type ToastProps, type ToastTone } from './Toast';
 export { ToastProvider, useToast, type ShowToastOptions } from './ToastProvider';
 export { useNavBarClearance } from './useNavBarClearance';
