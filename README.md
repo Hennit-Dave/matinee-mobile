@@ -7,7 +7,7 @@ Matinee is a cinema ticket booking app: browse movies, pick seats on a seat map,
 <!-- TODO (Dave): swap in a GIF of the full booking flow when recorded. -->
 
 - **Android build (download):** https://expo.dev/accounts/hennit_dave/projects/matinee/builds/ef7c7345-80bd-43cf-a9bf-1d5f534817e7
-- **Demo video:** [demo video](#) <!-- TODO (Dave): replace # with the video URL after upload -->
+- **Demo video:** [demo video](https://lnkd.in/p/dM-k2isA)
 - **Server repo:** https://github.com/Hennit-Dave/matinee-server
 - **Payments run in Stripe test mode** — no real charges.
 
