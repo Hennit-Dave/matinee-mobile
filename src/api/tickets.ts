@@ -89,3 +89,13 @@ export function ticketBadge(status: TicketStatus, startsAt: string, now: number)
   if (status === 'requires_payment') return { label: 'Confirming', tone: 'info' };
   return new Date(startsAt).getTime() >= now ? { label: 'Ready', tone: 'success' } : { label: 'Watched', tone: 'neutral' };
 }
+
+/**
+ * The per-card note, varying by status (Figma 63:14006). `null` for a Watched (past, succeeded) ticket, where the
+ * badge stands alone. The refund note stays generic on purpose: we don't promise a timeframe we can't guarantee.
+ */
+export function ticketNote(status: TicketStatus, startsAt: string, now: number): string | null {
+  if (status === 'refunded') return 'Refund on its way';
+  if (status === 'requires_payment') return 'Ticket appears here soon';
+  return new Date(startsAt).getTime() >= now ? 'Saved on this phone' : null;
+}

@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { getClientId } from '../../api/clientIdNative';
 import { requireBaseUrl } from '../../api/requireBaseUrl';
 import { formatTicketDate, formatTicketSeats } from '../../api/ticket';
-import { fetchTickets, isUpcomingTicket, ticketBadge, type TicketItem } from '../../api/tickets';
+import { fetchTickets, isUpcomingTicket, ticketBadge, ticketNote, type TicketItem } from '../../api/tickets';
 import { Badge, Card, Chip, EmptyState, Skeleton, Text, useNavBarClearance } from '../../components';
 import { useTheme } from '../../theme';
 import { primitives } from '../../tokens/tokens';
@@ -18,6 +18,7 @@ const SKELETON_CARDS = [0, 1, 2];
 /** One ticket, as a tappable Card: title, "cinema · date, time · Seats …", a status badge, and "Saved on this phone". */
 function TicketCard({ ticket, now, onPress }: { ticket: TicketItem; now: number; onPress: () => void }) {
   const badge = ticketBadge(ticket.status, ticket.startsAt, now);
+  const note = ticketNote(ticket.status, ticket.startsAt, now);
   return (
     <Pressable
       accessibilityRole="button"
@@ -31,9 +32,11 @@ function TicketCard({ ticket, now, onPress }: { ticket: TicketItem; now: number;
       >
         <View style={styles.cardFooter}>
           <Badge tone={badge.tone} label={badge.label} />
-          <Text variant="caption" color="text/secondary">
-            Saved on this phone
-          </Text>
+          {note !== null ? (
+            <Text variant="caption" color="text/secondary">
+              {note}
+            </Text>
+          ) : null}
         </View>
       </Card>
     </Pressable>
