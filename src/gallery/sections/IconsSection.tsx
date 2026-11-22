@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native';
-import { Icon, Text, type IconName, type IconProps, type IconSize } from '../../components';
+import { Icon, Logo, Text, type IconName, type IconProps, type IconSize } from '../../components';
 import { primitives } from '../../tokens/tokens';
 import { GalleryGroup, GalleryItem, GalleryRow } from '../GalleryParts';
 
@@ -32,10 +32,11 @@ const COLORS: readonly NonNullable<IconProps['color']>[] = [
 
 export function IconsSection() {
   return (
-    <GalleryGroup
-      name="Icon"
-      note="12 icons, 3 sizes (sm 16, md 20, lg 24), coloured by semantic token. Pass accessibilityLabel when an icon stands alone."
-    >
+    <>
+      <GalleryGroup
+        name="Icon"
+        note="12 icons, 3 sizes (sm 16, md 20, lg 24), coloured by semantic token. Pass accessibilityLabel when an icon stands alone."
+      >
       <GalleryItem label="All icons at sm, md and lg">
         <View style={styles.grid}>
           {ICON_NAMES.map((name) => (
@@ -66,6 +67,26 @@ export function IconsSection() {
         </GalleryRow>
       </GalleryItem>
     </GalleryGroup>
+
+    <GalleryGroup
+      name="Logo"
+      note="Three variants, recoloured by token: text/primary follows the theme, neutral/0 is always white (over the hero scrim)."
+    >
+      <GalleryItem label="Variants in text/primary">
+        <GalleryRow>
+          <Logo variant="lockup-horizontal" />
+          <Logo variant="lockup-compact" />
+          <Logo variant="mark" />
+        </GalleryRow>
+      </GalleryItem>
+
+      <GalleryItem label="Mono-light (neutral/0) over a dark surface">
+        <View style={styles.darkPanel}>
+          <Logo variant="lockup-horizontal" color="neutral/0" />
+        </View>
+      </GalleryItem>
+    </GalleryGroup>
+    </>
   );
 }
 
@@ -83,5 +104,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: primitives['space/2'],
+  },
+  darkPanel: {
+    alignSelf: 'flex-start',
+    padding: primitives['space/4'],
+    borderRadius: primitives['radius/md'],
+    backgroundColor: primitives['neutral/1000'],
   },
 });

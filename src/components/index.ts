@@ -10,6 +10,7 @@ export { HeroBackdrop, type HeroBackdropProps, svgStopProps } from './HeroBackdr
 export { Icon, type IconName, type IconProps, type IconSize } from './Icon';
 export { Input, type InputProps } from './Input';
 export { LiveCountdown, type LiveCountdownProps } from './LiveCountdown';
+export { Logo, type LogoColor, type LogoProps, type LogoVariant } from './Logo';
 export { NavBar, type NavBarProps } from './NavBar';
 export { OverloadedState, type OverloadedStateProps } from './OverloadedState';
 export { NAV_ITEMS, type NavItemKey } from './navBarLogic';

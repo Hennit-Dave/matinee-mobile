@@ -6,6 +6,7 @@
     "version": "0.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
     "plugins": [
       "expo-router",
       [
@@ -18,6 +19,14 @@
         "@stripe/stripe-react-native",
         {
           "merchantDisplayName": "Matinee"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#131314"
         }
       ]
     ],
@@ -35,7 +44,11 @@
       }
     },
     "android": {
-      "package": "com.davebuilds.matinee"
+      "package": "com.davebuilds.matinee",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#131314"
+      }
     }
   }
 }
