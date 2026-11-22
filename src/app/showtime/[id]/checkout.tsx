@@ -7,7 +7,7 @@ import { acquireCheckout, checkoutFailureMessage, idempotencyKeyFor } from '../.
 import { getClientId } from '../../../api/clientIdNative';
 import { refundReasonCopy } from '../../../api/refundCopy';
 import { usePaymentConfirmation } from '../../../api/usePaymentConfirmation';
-import { EmptyState, Icon, Skeleton, Text } from '../../../components';
+import { Button, Card, EmptyState, Icon, Skeleton, Text } from '../../../components';
 import * as haptics from '../../../lib/haptics';
 import { classifyPaymentSheetError, MERCHANT_DISPLAY_NAME, readStripePublishableKey } from '../../../lib/stripe';
 import { useTheme } from '../../../theme';
@@ -22,14 +22,29 @@ import { primitives } from '../../../tokens/tokens';
 
 type Phase = 'creating' | 'error' | 'confirming';
 
+/** The booking card shown while confirming: the film, the showing + seats, and the server-formatted total. */
+function BookingCard({ title, showing, seatCount, total }: { title?: string; showing?: string; seatCount: number; total: string | null }) {
+  const line = showing ? `${showing} · Seats ${seatCount}` : `Seats ${seatCount}`;
+  return (
+    <Card title={title ?? 'Your booking'} body={line}>
+      {total ? (
+        <Text variant="label-lg" color="text/primary" tabularNums>
+          Total {total}
+        </Text>
+      ) : null}
+    </Card>
+  );
+}
+
 export default function CheckoutScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
-  const params = useLocalSearchParams<{ id?: string; seats?: string; title?: string }>();
+  const params = useLocalSearchParams<{ id?: string; seats?: string; title?: string; showing?: string }>();
   const showtimeId = typeof params.id === 'string' ? params.id : '';
   const title = typeof params.title === 'string' && params.title ? params.title : undefined;
+  const showing = typeof params.showing === 'string' && params.showing ? params.showing : undefined;
   const seatIds = useMemo(() => {
     try {
       const parsed: unknown = params.seats ? JSON.parse(params.seats) : [];
@@ -56,6 +71,11 @@ export default function CheckoutScreen() {
   const goHome = useCallback(() => {
     if (router.canDismiss()) router.dismissAll();
     else router.replace('/');
+  }, [router]);
+
+  const goToTickets = useCallback(() => {
+    if (router.canDismiss()) router.dismissAll();
+    router.navigate('/tickets' as Href);
   }, [router]);
 
   const run = useCallback(async () => {
@@ -163,20 +183,21 @@ export default function CheckoutScreen() {
         />
       ) : null}
 
-      {phase === 'confirming' ? (
-        confirmation.phase === 'checking' || confirmation.phase === 'succeeded' ? (
-          <View style={styles.body}>
-            <Skeleton shape="text" width={primitives['space/16']} height={primitives['space/5']} />
-            <Text variant="body" color="text/secondary">
-              Confirming your payment…
-            </Text>
-            {total ? (
-              <Text variant="label-lg" color="text/primary" tabularNums>
-                {total}
-              </Text>
-            ) : null}
+      {phase === 'confirming' && (confirmation.phase === 'checking' || confirmation.phase === 'succeeded') ? (
+        <View style={styles.body}>
+          <View style={styles.dots} aria-hidden>
+            <View style={[styles.dot, { backgroundColor: colors['primary/default'] }]} />
+            <View style={[styles.dot, { backgroundColor: colors['primary/default'] }]} />
+            <View style={[styles.dot, { backgroundColor: colors['primary/default'] }]} />
           </View>
-        ) : null
+          <Text variant="title-lg" color="text/primary" accessibilityRole="header">
+            Confirming your booking
+          </Text>
+          <Text variant="body" color="text/secondary">
+            This usually takes a few seconds. Please keep the app open.
+          </Text>
+          <BookingCard title={title} showing={showing} seatCount={seatIds.length} total={total} />
+        </View>
       ) : null}
 
       {phase === 'confirming' && confirmation.phase === 'refunded' ? (
@@ -200,15 +221,21 @@ export default function CheckoutScreen() {
       ) : null}
 
       {phase === 'confirming' && confirmation.phase === 'unconfirmed' ? (
-        <EmptyState
-          icon="info"
-          headline="Still confirming"
-          body="This is taking longer than usual. Your seats are still held."
-          actionLabel="Check again"
-          onAction={() => confirmationController.retry()}
-          secondaryActionLabel="Back to seats"
-          onSecondaryAction={goBack}
-        />
+        <View style={styles.body}>
+          <Icon name="success" size="xl" color="status/success" />
+          <Text variant="title-lg" color="text/primary" accessibilityRole="header">
+            Your payment went through
+          </Text>
+          <Text variant="body" color="text/secondary">
+            Confirmation is taking longer than usual. Your ticket will appear in Tickets as soon as it&apos;s ready.
+            You don&apos;t need to pay again.
+          </Text>
+          <BookingCard title={title} showing={showing} seatCount={seatIds.length} total={total} />
+          <View style={styles.footer}>
+            <Button variant="primary" fullWidth label="Go to Tickets" onPress={goToTickets} />
+            <Button variant="secondary" fullWidth label="Back to Home" onPress={goHome} />
+          </View>
+        </View>
       ) : null}
     </SafeAreaView>
   );
@@ -238,5 +265,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: primitives['space/6'],
     paddingTop: primitives['space/8'],
     gap: primitives['space/3'],
+  },
+  dots: {
+    flexDirection: 'row',
+    gap: primitives['space/1'],
+  },
+  dot: {
+    width: primitives['space/2'],
+    height: primitives['space/2'],
+    borderRadius: primitives['radius/full'],
+  },
+  footer: {
+    marginTop: 'auto',
+    gap: primitives['space/3'],
+    paddingBottom: primitives['space/4'],
   },
 });

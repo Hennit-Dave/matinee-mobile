@@ -1,15 +1,15 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getClientId } from '../../api/clientIdNative';
 import { MovieApiError } from '../../api/movies';
 import { fetchOrderStatus, type OrderStatusResponse } from '../../api/orderStatus';
 import { refundReasonCopy } from '../../api/refundCopy';
 import { requireBaseUrl } from '../../api/requireBaseUrl';
-import { formatTicketDate, formatTicketSeats } from '../../api/ticket';
-import { Card, EmptyState, Icon, Skeleton, Text } from '../../components';
+import { displayReference, formatTicketDate, formatTicketSeats } from '../../api/ticket';
+import { Button, EmptyState, Icon, Logo, Skeleton, Text } from '../../components';
 import { useTheme } from '../../theme';
 import { primitives } from '../../tokens/tokens';
 
@@ -20,6 +20,15 @@ import { primitives } from '../../tokens/tokens';
  */
 
 type TicketStatus = 'loading' | 'ready' | 'not_found' | 'error';
+
+/** The QR's ~177dp size (Figma 59:3968). A dimension, not a token. */
+const QR_SIZE = 177;
+
+const AT_THE_CINEMA_STEPS = [
+  'Show this code at the door.',
+  'It works without a signal. It is saved on this phone.',
+  'One scan lets everyone in this booking through.',
+] as const;
 
 export default function TicketScreen() {
   const router = useRouter();
@@ -54,12 +63,11 @@ export default function TicketScreen() {
     };
   }, [reference, attempt]);
 
-  const goBack = useCallback(() => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/');
-  }, [router]);
-
+  // From checkout there is no history (the modal is replaced), so no back control; from Tickets the chevron shows.
+  const canGoBack = router.canGoBack();
+  const goBack = useCallback(() => router.back(), [router]);
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  const goToTickets = () => router.navigate('/tickets' as Href);
 
   // A refunded order carries the server's reason; the non-succeeded state tailors its copy to it (e.g. a cancelled
   // showing). A failed / still-pending order has no reason and keeps the generic "wasn't confirmed" line.
@@ -67,18 +75,18 @@ export default function TicketScreen() {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors['surface/default'] }]} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          onPress={goBack}
-          style={({ pressed }) => [styles.backButton, pressed ? { backgroundColor: colors['secondary/pressed'] } : undefined]}
-        >
-          <Icon name="chevron-left" size="md" color="text/primary" />
-        </Pressable>
-        <Text variant="title" color="text/primary" accessibilityRole="header">
-          Your ticket
-        </Text>
+      <View style={styles.topBar}>
+        <Logo variant="lockup-compact" />
+        {canGoBack ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            onPress={goBack}
+            style={({ pressed }) => [styles.backButton, pressed ? { backgroundColor: colors['secondary/pressed'] } : undefined]}
+          >
+            <Icon name="chevron-left" size="md" color="text/primary" />
+          </Pressable>
+        ) : null}
       </View>
 
       {status === 'loading' ? (
@@ -95,7 +103,7 @@ export default function TicketScreen() {
           headline="Ticket not found"
           body="It may belong to another device, or have been removed."
           actionLabel="Back to home"
-          onAction={goBack}
+          onAction={goToTickets}
         />
       ) : null}
 
@@ -110,33 +118,92 @@ export default function TicketScreen() {
       ) : null}
 
       {status === 'ready' && ticket?.ticket ? (
-        <View style={styles.body}>
-          <Card title={ticket.ticket.movieTitle} body={`${ticket.ticket.cinemaName} · ${ticket.ticket.screenName}`}>
-            <View style={styles.qrWrap} accessible accessibilityLabel="Ticket QR code">
-              <QRCode
-                value={reference}
-                size={primitives['space/16'] + primitives['space/10']}
-                color={colors['qr/foreground']}
-                backgroundColor={colors['qr/background']}
-                ecl="M"
-              />
-            </View>
-            <View style={styles.details}>
-              <Text variant="body" color="text/secondary" tabularNums>
-                {formatTicketDate(ticket.ticket.startsAt)} · {ticket.ticket.time}
+        <>
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.body}>
+            <View style={styles.heading}>
+              <Text variant="title-lg" color="text/primary" accessibilityRole="header">
+                You&apos;re going
               </Text>
               <Text variant="body" color="text/secondary">
-                Seats {formatTicketSeats(ticket.ticket.seats)}
-              </Text>
-              <Text variant="label-lg" color="text/primary" tabularNums>
-                {ticket.ticket.totalFormatted}
-              </Text>
-              <Text variant="caption" color="text/secondary">
-                Reference {reference}
+                Booking confirmed · {displayReference(reference)}
               </Text>
             </View>
-          </Card>
-        </View>
+
+            <View style={[styles.ticketCard, { backgroundColor: colors['surface/raised'], borderColor: colors['border/default'] }]}>
+              <View style={styles.ticketSection}>
+                <Text variant="title" color="text/primary">
+                  {ticket.ticket.movieTitle}
+                </Text>
+                <Text variant="body" color="text/secondary">
+                  {ticket.ticket.cinemaName} · {ticket.ticket.screenName}
+                </Text>
+              </View>
+
+              <View style={styles.qrWrap} accessible accessibilityLabel="Ticket QR code">
+                <QRCode
+                  value={reference}
+                  size={QR_SIZE}
+                  color={colors['qr/foreground']}
+                  backgroundColor={colors['qr/background']}
+                  ecl="M"
+                />
+              </View>
+
+              <View style={[styles.perforation, { borderTopColor: colors['border/default'] }]} />
+
+              <View style={styles.ticketSection}>
+                <View style={styles.detailsRow}>
+                  <View style={styles.detailCol}>
+                    <Text variant="caption" color="text/secondary">
+                      Date
+                    </Text>
+                    <Text variant="label-lg" color="text/primary">
+                      {formatTicketDate(ticket.ticket.startsAt)}
+                    </Text>
+                  </View>
+                  <View style={styles.detailCol}>
+                    <Text variant="caption" color="text/secondary">
+                      Time
+                    </Text>
+                    <Text variant="label-lg" color="text/primary" tabularNums>
+                      {ticket.ticket.time}
+                    </Text>
+                  </View>
+                  <View style={styles.detailCol}>
+                    <Text variant="caption" color="text/secondary">
+                      Seats
+                    </Text>
+                    <Text variant="label-lg" color="text/primary">
+                      {formatTicketSeats(ticket.ticket.seats)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.cinemaSteps}>
+              <Text variant="title" color="text/primary" accessibilityRole="header">
+                At the cinema
+              </Text>
+              {AT_THE_CINEMA_STEPS.map((step, index) => (
+                <View key={step} style={styles.step}>
+                  <View style={[styles.stepNumber, { borderColor: colors['border/default'] }]}>
+                    <Text variant="caption" color="text/secondary">
+                      {index + 1}
+                    </Text>
+                  </View>
+                  <Text variant="body" color="text/primary" style={styles.stepText}>
+                    {step}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+
+          <View style={styles.footer}>
+            <Button variant="primary" fullWidth label="Go to Tickets" onPress={goToTickets} />
+          </View>
+        </>
       ) : null}
 
       {status === 'ready' && ticket && !ticket.ticket ? (
@@ -145,7 +212,7 @@ export default function TicketScreen() {
           headline={refunded ? refunded.headline : "This booking isn't available"}
           body={refunded ? refunded.body : "It wasn't confirmed. If you were charged, your payment has been refunded."}
           actionLabel="Back to home"
-          onAction={goBack}
+          onAction={goToTickets}
         />
       ) : null}
     </SafeAreaView>
@@ -154,9 +221,10 @@ export default function TicketScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  header: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: primitives['space/2'],
     paddingHorizontal: primitives['space/4'],
     paddingTop: primitives['space/4'],
@@ -168,16 +236,60 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  body: {
+  scroll: {
     flex: 1,
-    padding: primitives['space/6'],
-    gap: primitives['space/3'],
+  },
+  body: {
+    padding: primitives['space/4'],
+    gap: primitives['space/4'],
+  },
+  heading: {
+    gap: primitives['space/1'],
+  },
+  ticketCard: {
+    borderRadius: primitives['radius/lg'],
+    borderWidth: primitives['border-width/default'],
+    overflow: 'hidden',
+  },
+  ticketSection: {
+    padding: primitives['space/4'],
+    gap: primitives['space/1'],
   },
   qrWrap: {
     alignItems: 'center',
     paddingVertical: primitives['space/4'],
   },
-  details: {
+  perforation: {
+    borderTopWidth: primitives['border-width/default'],
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    gap: primitives['space/4'],
+  },
+  detailCol: {
+    flex: 1,
     gap: primitives['space/1'],
+  },
+  cinemaSteps: {
+    gap: primitives['space/3'],
+  },
+  step: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: primitives['space/3'],
+  },
+  stepNumber: {
+    width: primitives['size/icon-lg'],
+    height: primitives['size/icon-lg'],
+    borderRadius: primitives['radius/full'],
+    borderWidth: primitives['border-width/default'],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepText: {
+    flex: 1,
+  },
+  footer: {
+    padding: primitives['space/4'],
   },
 });
