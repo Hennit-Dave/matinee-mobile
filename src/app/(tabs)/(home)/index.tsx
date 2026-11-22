@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import {
   composeFeaturedMeta,
   pickDetail,
@@ -19,9 +20,11 @@ import {
   EmptyState,
   HeroBackdrop,
   Icon,
+  Logo,
   MovieCard,
   Skeleton,
   Text,
+  svgStopProps,
   useNavBarClearance,
 } from '../../../components';
 import { useTheme } from '../../../theme';
@@ -30,6 +33,8 @@ import { primitives } from '../../../tokens/tokens';
 const SKELETON_CARDS = [0, 1, 2];
 /** The outgoing hero slide stays mounted until the cross-fade has fully finished. */
 const HERO_SETTLE_MS = primitives['duration/slow'] + primitives['duration/fast'];
+/** The header scrim: a top-down gradient that keeps the white lockup + search legible over any poster. */
+const HEADER_SCRIM_HEIGHT = 240;
 
 function PosterRow({
   movies,
@@ -82,6 +87,8 @@ export default function Home() {
 
   const heroHeight = resolveHeroHeight(windowHeight);
   const searchTop = Math.max(insets.top + primitives['space/2'], primitives['space/8']);
+  // The logo's top edge: 16px below the safe area (Figma). Leading edge = space/4, matching the hero's padding.
+  const headerLogoTop = insets.top + primitives['space/4'];
 
   const { status, movies, error, isFetching, refetch } = useNowPlayingMovies(1);
   const popular = usePopularMovies(1);
@@ -320,6 +327,33 @@ export default function Home() {
         </ScrollView>
       ) : null}
 
+      {/* Header scrim + Mono-light lockup: rendered above the poster, below the logo and the search button. */}
+      {(status === 'ready' || status === 'offline_saved_data') && featured ? (
+        <>
+          <View pointerEvents="none" style={styles.headerScrim}>
+            <Svg width="100%" height="100%">
+              <Defs>
+                <LinearGradient id="homeHeaderScrim" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" {...svgStopProps(colors['surface/scrim'])} />
+                  <Stop offset="1" {...svgStopProps(colors['surface/scrim-clear'])} />
+                </LinearGradient>
+              </Defs>
+              <Rect x="0" y="0" width="100%" height="100%" fill="url(#homeHeaderScrim)" />
+            </Svg>
+          </View>
+          <View pointerEvents="none" style={[styles.headerLogo, { top: headerLogoTop }]}>
+            <Logo variant="lockup-horizontal" color="neutral/0" />
+          </View>
+        </>
+      ) : null}
+
+      {/* Compact lockup on the full-screen state takeovers (Home is a tab: no header/back button here). */}
+      {status === 'server_overloaded' || status === 'error' || status === 'empty' ? (
+        <View pointerEvents="none" style={[styles.headerLogo, { top: headerLogoTop }]}>
+          <Logo variant="lockup-compact" />
+        </View>
+      ) : null}
+
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Search movies"
@@ -385,6 +419,17 @@ const styles = StyleSheet.create({
   },
   stateWrap: {
     flex: 1,
+  },
+  headerScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: HEADER_SCRIM_HEIGHT,
+  },
+  headerLogo: {
+    position: 'absolute',
+    left: primitives['space/4'],
   },
   searchButton: {
     position: 'absolute',

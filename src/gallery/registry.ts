@@ -27,7 +27,7 @@ export interface GallerySectionSpec {
 
 export const GALLERY_SECTIONS: readonly GallerySectionSpec[] = [
   { id: 'typography', title: 'Typography', components: ['Text'], docs: '1. Typography' },
-  { id: 'icons', title: 'Icons', components: ['Icon'], docs: '9. Icons' },
+  { id: 'icons', title: 'Icons', components: ['Icon', 'Logo'], docs: '9. Icons' },
   { id: 'buttons', title: 'Buttons', components: ['Button'], docs: '2. Buttons' },
   {
     id: 'cards',

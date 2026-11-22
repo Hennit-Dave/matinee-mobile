@@ -478,6 +478,20 @@ Rules that apply to every component:
 - Sizes `size/icon-sm` (16), `size/icon-md` (20), `size/icon-lg` (24), and `xl` (48, `space/12`) for the info icon of the overloaded state (Figma `107:15558`). Colour comes from a semantic token passed in, never a raw hex.
 - There are no offline, settings or wrench icons. System screens reuse `info` and `error` on purpose.
 
+### Logo
+- **Figma:** Brand page — `Logo/Mark`, `Logo/Lockup [Compact/Horizontal/Stacked]` (file `76VKO0l9gGt5YMNYtH8yvM`). **Code:** `Logo`.
+- **Props:**
+
+| Figma | Code prop | Values | Default |
+|---|---|---|---|
+| Component | `variant` | `lockup-horizontal`, `lockup-compact`, `mark` | `lockup-horizontal` |
+| (colour, applied per use) | `color` | `neutral/0` (always white) or `text/primary` (theme) | `text/primary` |
+| | `height` | number in dp; width scales to the exported aspect ratio | the SVG's natural size |
+
+- **Tokens:** `neutral/0` (white, over the Home hero scrim) and `text/primary` (light/dark surfaces). **No new tokens.** The artwork is the exported SVG vectors (`src/components/logoAssets.ts`, verbatim from Figma), recoloured at render time.
+- **Used by:** Home hero (Mono-light `lockup-horizontal`) and the Home full-screen state takeovers (`lockup-compact`).
+- **Built (logo slice).** Code: `src/components/Logo.tsx`, vector data in `src/components/logoAssets.ts`. The app icon, adaptive icon and splash come from the same Brand page and are set in `app.json` (`icon`, `android.adaptiveIcon`, `expo-splash-screen`).
+
 ---
 
 ## 10. Tabular figures (set `fontVariant: ['tabular-nums']`)
