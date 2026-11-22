@@ -9,6 +9,7 @@ export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { HeroBackdrop, type HeroBackdropProps, svgStopProps } from './HeroBackdrop';
 export { Icon, type IconName, type IconProps, type IconSize } from './Icon';
 export { Input, type InputProps } from './Input';
+export { ListRow, type ListRowProps } from './ListRow';
 export { LiveCountdown, type LiveCountdownProps } from './LiveCountdown';
 export { Logo, type LogoColor, type LogoProps, type LogoVariant } from './Logo';
 export { NavBar, type NavBarProps } from './NavBar';

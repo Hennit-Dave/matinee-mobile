@@ -38,7 +38,7 @@ export const GALLERY_SECTIONS: readonly GallerySectionSpec[] = [
   {
     id: 'selection',
     title: 'Selection and labels',
-    components: ['Chip', 'Badge'],
+    components: ['Chip', 'Badge', 'ListRow'],
     docs: '4. Selection and labels',
   },
   { id: 'input', title: 'Input', components: ['Input'], docs: '5. Input' },
@@ -86,7 +86,6 @@ export interface PlannedComponent {
 export const PLANNED_COMPONENTS: readonly PlannedComponent[] = [
   { name: 'QRCode', docs: '3. Cards and posters' },
   { name: 'Switch', docs: '4. Selection and labels' },
-  { name: 'ListRow', docs: '4. Selection and labels' },
 ];
 
 export function coveredComponents(): string[] {

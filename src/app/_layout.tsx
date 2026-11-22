@@ -49,6 +49,8 @@ function RootContent() {
       <Stack.Screen name="showtime/[id]/checkout" options={{ presentation: 'modal' }} />
       {/* The ticket after a confirmed booking (D4.6). */}
       <Stack.Screen name="ticket/[reference]" />
+      {/* About Matinee (version, links, TMDB attribution), pushed from the Account tab. */}
+      <Stack.Screen name="about" />
       {/* Development-only check screen: not reachable from the tab bar. */}
       <Stack.Screen name="dev-health" />
       {/* Hidden component gallery (RULES.md D3.4): unlinked, open it by its path, /gallery. */}

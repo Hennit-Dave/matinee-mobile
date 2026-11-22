@@ -214,6 +214,7 @@ Rules that apply to every component:
 - **Tokens:** `surface/raised` (set by the parent group), `border/default` bottom hairline (hidden on the last row), `type/label-lg` title, `type/body` value, `text/primary`, `text/secondary`, `size/icon-lg` chevron, `space/2` to `space/4`.
 - **Size:** at least 56 high (hugs when the value line is shown, 60 in Figma). The whole row is the touch target.
 - **Composition:** rows are grouped inside a bordered `surface/raised` container with `radius/lg`. The container is a layout wrapper, not a component.
+- **Built (account-about slice).** Code: `src/components/ListRow.tsx`. Props differ from the table above: `label` (the title), `onPress`, optional `leading`/`trailing` (defaults to the `size/icon-lg` chevron), and `showDivider` (the parent group hides the last row's hairline). The Switch trailing and the `value` secondary line are not built yet (Switch is still planned).
 
 ---
 
